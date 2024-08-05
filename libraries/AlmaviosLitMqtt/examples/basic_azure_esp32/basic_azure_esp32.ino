@@ -1,0 +1,22 @@
+#include <AlmaviosLitMqtt.h>
+#include "certs.h"
+
+#define SSID_        "YourWifiSSID"
+#define PASSWORD_    "writeyourpassword"
+long lastMsg = 0;
+
+void setup(){
+    Serial.begin(115200);
+    LitCloudAzure.begin( "nameofyourhub", "yourdeviceid", device_crt, device_key);
+    LitMqtt.begin(SSID_, PASSWORD_, LitCloudAzure);
+}
+
+void loop(){
+    LitMqtt.run();
+
+    long now = millis();
+    if (now - lastMsg > 16000) {
+        lastMsg = now;
+        LitMqtt.publish("An important message");
+    }
+}
