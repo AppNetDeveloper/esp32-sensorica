@@ -1,10 +1,13 @@
 # Changelog
 
+## [v1.1.1](https://github.com/jackjansen/esp32_idf5_https_server/tree/master)
+
+- Addressed issues with esp32-arduino-core v3 and esp-idf 5.0
+
 ## [v1.1.0](https://github.com/jackjansen/esp32_idf5_https_server/tree/master)
 
 - Compatible with ESP-IDF 5.0
 - Use esp-tls in stead of openssl
-
 
 ## [v1.0.0](https://github.com/fhessel/esp32_https_server/releases/tag/v1.0.0)
 

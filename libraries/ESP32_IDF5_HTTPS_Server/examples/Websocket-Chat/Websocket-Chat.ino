@@ -17,8 +17,10 @@
 #include <sstream>
 
 // TODO: Configure your WiFi here
+#ifndef WIFI_SSID
 #define WIFI_SSID "<your ssid goes here>"
 #define WIFI_PSK  "<your pre-shared key goes here>"
+#endif
 
 // Max clients to be connected to the chat
 #define MAX_CLIENTS 4

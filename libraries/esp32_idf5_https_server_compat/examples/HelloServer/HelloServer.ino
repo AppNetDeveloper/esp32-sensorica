@@ -8,17 +8,27 @@ typedef WebServer ESPWebServer;
 #include <ESPWebServer.hpp>
 #endif
 
-const char* ssid = "........";
-const char* password = "........";
+// SSID and PSK are best defined with -D options during compilation. But default definitions are provided
+// here for automatic CI/CD runs.
+
+#ifndef WIFI_SSID
+#define WIFI_SSID "unknown"
+#endif
+#ifndef WIFI_PSK
+#define WIFI_PSK "unknown"
+#endif
+
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PSK;
 
 ESPWebServer server(80);
 
-const int led = 13;
+// const int led = 13;
 
 void handleRoot() {
-  digitalWrite(led, 1);
+  // digitalWrite(led, 1);
   server.send(200, "text/plain", "hello from esp32! See /form and /inline too!");
-  digitalWrite(led, 0);
+  // digitalWrite(led, 0);
 }
 
 void handleForm() {
@@ -56,7 +66,7 @@ void handleForm() {
 
 
 void handleNotFound() {
-  digitalWrite(led, 1);
+  // digitalWrite(led, 1);
   String message = "File Not Found\n\n";
   message += "URI: ";
   message += server.uri();
@@ -69,13 +79,15 @@ void handleNotFound() {
     message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
   }
   server.send(404, "text/plain", message);
-  digitalWrite(led, 0);
+  // digitalWrite(led, 0);
 }
 
 void setup(void) {
-  pinMode(led, OUTPUT);
-  digitalWrite(led, 0);
+  // pinMode(led, OUTPUT);
+  // digitalWrite(led, 0);
   Serial.begin(115200);
+  delay(3000);
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.println("");

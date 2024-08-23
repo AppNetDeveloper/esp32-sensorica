@@ -267,7 +267,7 @@ void setup() {
 
     mqtt_port = loadIntFromEEPROM(EEPROM_MQTT_PORT_ADDR);
     if (mqtt_port == 0) {
-        mqtt_port = 1883;
+        mqtt_port = 1885;
         saveIntToEEPROM(EEPROM_MQTT_PORT_ADDR, mqtt_port);
     }
 

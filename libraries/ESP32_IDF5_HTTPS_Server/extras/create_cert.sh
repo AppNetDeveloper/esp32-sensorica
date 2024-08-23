@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -x
 #------------------------------------------------------------------------------
 # cleanup any previously created files
 rm -f exampleca.* example.* cert.h private_key.h

@@ -1,21 +1,20 @@
 //Author: Leonardo La Rocca
-#include "Melopero_VL53L1X.h"
-#include "Wire.h"
 
-Melopero_VL53L1X::Melopero_VL53L1X(uint8_t i2cAddr){
+#include "Melopero_VL53L1X.h"
+
+Melopero_VL53L1X::Melopero_VL53L1X(){
+
+}
+
+VL53L1_Error Melopero_VL53L1X::initI2C(uint8_t i2cAddr, TwoWire &bus){
     device = &dev;
     device->I2cDevAddr = i2cAddr;
+    i2c_handle.i2c = &bus;
+    device->I2cHandle = &i2c_handle;
+    return VL53L1_ERROR_NONE;
 }
 
-//Device initialization functions
-VL53L1_Error Melopero_VL53L1X::setDeviceAddress(uint8_t newAddress){
-    VL53L1_Error status =  VL53L1_SetDeviceAddress(device, newAddress);
-    getErrorDescription(status);
-    return status;
-}
-
-VL53L1_Error Melopero_VL53L1X::initDevice(){
-    Wire.begin();
+VL53L1_Error Melopero_VL53L1X::initSensor(){
     VL53L1_Error stat = 0;
     stat = softwareReset();
     getErrorDescription(stat);
@@ -29,15 +28,22 @@ VL53L1_Error Melopero_VL53L1X::initDevice(){
     stat = staticInit();
     getErrorDescription(stat);
     if (stat != VL53L1_ERROR_NONE) return stat;
-    stat = setDistanceMode(VL53L1_DISTANCEMODE_LONG);
+    stat = setDistanceMode(VL53L1_DISTANCEMODE_MEDIUM);
     getErrorDescription(stat);
     if (stat != VL53L1_ERROR_NONE) return stat;
     stat = setMeasurementTimingBudgetMicroSeconds(66000);
     getErrorDescription(stat);
     if (stat != VL53L1_ERROR_NONE) return stat;
-    stat = setInterMeasurementPeriodMilliSeconds(50);
+    stat = setInterMeasurementPeriodMilliSeconds(75);
     getErrorDescription(stat);
     return stat;
+}
+
+//Device initialization functions
+VL53L1_Error Melopero_VL53L1X::setDeviceAddress(uint8_t newAddress){
+    VL53L1_Error status =  VL53L1_SetDeviceAddress(device, newAddress);
+    getErrorDescription(status);
+    return status;
 }
 
 VL53L1_Error Melopero_VL53L1X::dataInit(){
@@ -198,5 +204,5 @@ VL53L1_Error Melopero_VL53L1X::getInterruptConfig(){
 
 VL53L1_Error Melopero_VL53L1X::getErrorDescription(VL53L1_Error error){
     return VL53L1_GetPalErrorString(error, errorString);
-    //return VL53L1_ERROR_NONE;
+    return VL53L1_ERROR_NONE;
 }

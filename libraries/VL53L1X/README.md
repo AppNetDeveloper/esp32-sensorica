@@ -1,7 +1,4 @@
 # VL53L1X library for Arduino
-
-Version: 1.3.0<br>
-Release date: 2021-04-16<br>
 [www.pololu.com](https://www.pololu.com/)
 
 ## Summary
@@ -87,10 +84,10 @@ This library is intended to provide a quicker and easier way to get started usin
 * `VL53L1X()`<br>
   Constructor.
 
-* void setBus(TwoWire * bus)
+* `void setBus(TwoWire * bus)`<br>
   Configures this object to use the specified I&sup2;C bus. `bus` should be a pointer to a `TwoWire` object; the default bus is `Wire`, which is typically the first or only I&sup2;C bus on an Arduino. If your Arduino has more than one I&sup2;C bus and you have the VL53L0X connected to the second bus, which is typically called `Wire1`, you can call `sensor.setBus(&Wire1);`.
 
-* TwoWire * getBus()
+* `TwoWire * getBus()`<br>
   Returns a pointer to the I&sup2;C bus this object is using.
 
 * `void setAddress(uint8_t new_addr)`<br>
@@ -188,6 +185,7 @@ This library is intended to provide a quicker and easier way to get started usin
 
 ## Version history
 
+* 1.3.1 (2022-02-18): Explicitly cast `Wire.write()` arguments to `uint8_t` (thanks giulcioffi). Added multiple sensors example.
 * 1.3.0 (2021-04-16): Added functions to configure and retrieve a custom region of interest (ROI) for the VL53L1X.
 * 1.2.1 (2020-11-23): Fixed compile error on platforms where `TwoWire` isn't a class.
 * 1.2.0 (2020-11-13): Added support for alternative I&sup2;C buses (thanks mampfes).
