@@ -1,11 +1,12 @@
-#include <ESP8266WiFi.h>
-#include <ESPAsyncWebServer.h>
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebSrv.h>
 #include <Wire.h>
 #include <VL53L1X.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 #include <EEPROM.h>
-#include <ESP8266mDNS.h>
+#include <ESPmDNS.h>
 #include <DNSServer.h>
 
 #define DEFAULT_SSID "Lss"
@@ -118,7 +119,7 @@ void setup_wifi() {
         Serial.println(WiFi.localIP());
 
         String btName = "ESP-" + WiFi.localIP().toString();
-        WiFi.hostname(btName);
+        WiFi.setHostname(btName.c_str());
         if (MDNS.begin(btName.c_str())) {
             Serial.println("Servicio mDNS iniciado. Nombre Bluetooth: " + btName);
         } else {
@@ -130,7 +131,7 @@ void setup_wifi() {
 void reconnect() {
     while (!client.connected()) {
         Serial.print("Conectando a MQTT...");
-        if (client.connect("ESP8266Client")) {
+        if (client.connect("ESP32S3Client")) {
             Serial.println("Conectado a MQTT");
             if (lastMessage.length() > 0) {
                 client.publish(mqtt_topic, lastMessage.c_str());
@@ -198,7 +199,7 @@ void setup() {
 
     loadStringFromEEPROM(EEPROM_TOPIC_ADDR, mqtt_topic, EEPROM_TOPIC_SIZE);
     if (strlen(mqtt_topic) == 0) {
-        sprintf(mqtt_topic, "dicaproduct/sensorica/%08X", ESP.getChipId());
+        sprintf(mqtt_topic, "sensorica/%08X", (uint32_t)ESP.getEfuseMac());
         saveStringToEEPROM(EEPROM_TOPIC_ADDR, mqtt_topic, EEPROM_TOPIC_SIZE);
         Serial.println("Configurando MQTT Topic por defecto: " + String(mqtt_topic));
     }
