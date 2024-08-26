@@ -236,30 +236,75 @@ void setup() {
     ultrasonicSensorConnected = true; // Inicializar como conectado para comenzar la lectura
     Serial.println("Iniciando el sensor ultrasónico...");
 
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        StaticJsonDocument<200> doc;
-        doc["medidor-laser"]["value"] = laserDistance;
-        doc["medidor-ultrasonido"]["value"] = ultrasonicDistance;
+    // Configuración del servidor web
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        StaticJsonDocument<200> doc; // Crear un documento JSON con tamaño 200 bytes
+        if (laserSensorConnected) {
+            doc["medidor-laser"]["value"] = laserDistance;  // Agregar la distancia del láser al JSON si el sensor está conectado
+        } else {
+            doc["medidor-laser"]["value"] = "Connection lost"; // Agregar mensaje de error si el sensor láser está desconectado
+        }
+
+        if (ultrasonicSensorConnected) {
+            doc["medidor-ultrasonido"]["value"] = ultrasonicDistance;  // Agregar la distancia del ultrasonido al JSON si el sensor está conectado
+        } else {
+            doc["medidor-ultrasonido"]["value"] = "Connection lost"; // Agregar mensaje de error si el sensor ultrasonido está desconectado
+        }
 
         String output;
-        serializeJson(doc, output);
-        request->send(200, "application/json", output);
+        serializeJson(doc, output); // Convertir el JSON a una cadena de texto
+        request->send(200, "application/json", output); // Enviar la respuesta JSON al cliente
     });
 
-    server.on("/setup", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/html", "Configuración en proceso.");
+    // Página de configuración
+    server.on("/setup", HTTP_GET, [](AsyncWebServerRequest *request){
+        String html = "<html><body>";
+        html += "<form action=\"/setup\" method=\"post\">";
+        html += "WiFi SSID: <input type=\"text\" name=\"ssid\" value=\"" + String(wifi_ssid) + "\"><br>";
+        html += "WiFi Password: <input type=\"text\" name=\"password\" value=\"" + String(wifi_password) + "\"><br>";
+        html += "MQTT Topic: <input type=\"text\" name=\"topic\" value=\"" + String(mqtt_topic) + "\"><br>";
+        html += "MQTT Server: <input type=\"text\" name=\"server\" value=\"" + String(mqtt_server) + "\"><br>";
+        html += "MQTT Port: <input type=\"text\" name=\"port\" value=\"" + String(mqtt_port) + "\"><br>";
+        html += "<input type=\"submit\" value=\"Save\">";
+        html += "</form>";
+        html += "</body></html>";
+        request->send(200, "text/html", html);
     });
 
-    server.on("/setup", HTTP_POST, [](AsyncWebServerRequest *request) {
-        // ... manejar la configuración aquí (igual que antes)
+    server.on("/setup", HTTP_POST, [](AsyncWebServerRequest *request){
+        if (request->hasParam("ssid", true)) {
+            String newSSID = request->getParam("ssid", true)->value();
+            newSSID.toCharArray(wifi_ssid, EEPROM_WIFI_SSID_SIZE);
+            saveStringToEEPROM(EEPROM_WIFI_SSID_ADDR, wifi_ssid, EEPROM_WIFI_SSID_SIZE);
+            Serial.println("Nuevo WiFi SSID guardado: " + String(wifi_ssid));
+        }
+        if (request->hasParam("password", true)) {
+            String newPassword = request->getParam("password", true)->value();
+            newPassword.toCharArray(wifi_password, EEPROM_WIFI_PASS_SIZE);
+            saveStringToEEPROM(EEPROM_WIFI_PASS_ADDR, wifi_password, EEPROM_WIFI_PASS_SIZE);
+            Serial.println("Nuevo WiFi Password guardado: " + String(wifi_password));
+        }
+        if (request->hasParam("topic", true)) {
+            String newTopic = request->getParam("topic", true)->value();
+            newTopic.toCharArray(mqtt_topic, EEPROM_TOPIC_SIZE);
+            saveStringToEEPROM(EEPROM_TOPIC_ADDR, mqtt_topic, EEPROM_TOPIC_SIZE);
+            Serial.println("Nuevo MQTT Topic guardado: " + String(mqtt_topic));
+        }
+        if (request->hasParam("server", true)) {
+            String newServer = request->getParam("server", true)->value();
+            newServer.toCharArray(mqtt_server, 16);
+            saveStringToEEPROM(EEPROM_MQTT_IP_ADDR, mqtt_server, 16);
+            Serial.println("Nuevo MQTT Server guardado: " + String(mqtt_server));
+        }
+        if (request->hasParam("port", true)) {
+            String newPortStr = request->getParam("port", true)->value();
+            mqtt_port = newPortStr.toInt();
+            saveIntToEEPROM(EEPROM_MQTT_PORT_ADDR, mqtt_port);
+            Serial.println("Nuevo MQTT Port guardado: " + String(mqtt_port));
+        }
+        request->send(200, "text/html", "<html><body>Configuration saved. <a href=\"/\">Return to main page</a></body></html>");
+        ESP.restart();
     });
-
-    if (setupMode) {
-        dnsServer.start(53, "*", WiFi.softAPIP());
-        server.onNotFound([](AsyncWebServerRequest *request) {
-            request->redirect("/setup");
-        });
-    }
 
     server.begin();
     Serial.println("Servidor HTTP iniciado");
@@ -306,3 +351,4 @@ void loop() {
         delay(500);
     }
 }
+
