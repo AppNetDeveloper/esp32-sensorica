@@ -15,17 +15,17 @@
 #define EEPROM_SIZE 512
 #define EEPROM_TOPIC_ADDR 0
 #define EEPROM_TOPIC_SIZE 100
-#define EEPROM_MQTT_IP_ADDR (EEPROM_TOPIC_ADDR + EEPROM_TOPIC_SIZE)
+#define EEPROM_MQTT_IP_ADDR (EEPROM_TOPIC_ADDR + 100)
 #define EEPROM_MQTT_PORT_ADDR (EEPROM_MQTT_IP_ADDR + 16)
 #define EEPROM_WIFI_SSID_ADDR (EEPROM_MQTT_PORT_ADDR + 2)
 #define EEPROM_WIFI_SSID_SIZE 32
-#define EEPROM_WIFI_PASS_ADDR (EEPROM_WIFI_SSID_ADDR + EEPROM_WIFI_SSID_SIZE)
+#define EEPROM_WIFI_PASS_ADDR (EEPROM_WIFI_SSID_ADDR + 32)
 #define EEPROM_WIFI_PASS_SIZE 32
 
-#define BUTTON_PIN 14
+#define BUTTON_PIN 12
 #define LONG_PRESS_TIME 5000
 
-#define TRIG_PIN 12 // Pin para el Trigger del sensor ultrasónico
+#define TRIG_PIN 14 // Pin para el Trigger del sensor ultrasónico
 #define ECHO_PIN 13 // Pin para el Echo del sensor ultrasónico
 
 WiFiClient espClient;
@@ -44,6 +44,12 @@ bool laserSensorConnected = true;
 long ultrasonicDistance = 0;
 bool ultrasonicSensorConnected = true;
 
+const int numReadings = 10;   // Número de lecturas para promediar
+long readings[numReadings];   // Arreglo para almacenar las lecturas
+int readIndex = 0;            // Índice para la posición actual en el arreglo
+long total = 0;               // Total de todas las lecturas
+long average = 0;             // Promedio de las lecturas
+
 char mqtt_topic[EEPROM_TOPIC_SIZE];
 char mqtt_server[16];
 int mqtt_port;
@@ -53,6 +59,8 @@ String lastMessage;
 
 bool setupMode = false;
 unsigned long buttonPressStartTime = 0;
+
+SemaphoreHandle_t sensorDataMutex;
 
 void saveStringToEEPROM(int addr, const char* data, int maxSize) {
     EEPROM.begin(EEPROM_SIZE);
@@ -174,7 +182,63 @@ long readUltrasonicDistance() {
     digitalWrite(TRIG_PIN, LOW);
 
     long duration = pulseIn(ECHO_PIN, HIGH);
-    return duration * 0.034 / 2; // Convertir a cm
+    long distance = duration * 0.34 / 2; // Convertir a mm
+
+    // Filtrado de ruido
+    total = total - readings[readIndex];       // Restar la lectura más antigua
+    readings[readIndex] = distance;            // Guardar la nueva lectura
+    total = total + readings[readIndex];       // Agregar la nueva lectura al total
+    readIndex = (readIndex + 1) % numReadings; // Avanzar al siguiente índice
+
+    average = total / numReadings; // Calcular el promedio
+
+    return average; // Retornar la distancia promedio
+}
+
+void measureSensors(void* parameter) {
+    while (true) {
+        // Leer el sensor ultrasónico si está conectado
+        long ultrasonicTemp = readUltrasonicDistance();
+
+        xSemaphoreTake(sensorDataMutex, portMAX_DELAY);
+        ultrasonicDistance = ultrasonicTemp;
+        xSemaphoreGive(sensorDataMutex);
+
+        // Leer el sensor láser si está conectado
+        if (laserSensorConnected) {
+            uint16_t laserTemp = laserSensor.read();
+            xSemaphoreTake(sensorDataMutex, portMAX_DELAY);
+            laserDistance = laserTemp;
+            xSemaphoreGive(sensorDataMutex);
+        }
+
+        delay(50);  // Reducir el ruido tomando lecturas cada 50ms
+    }
+}
+
+void mqttPublish(void* parameter) {
+    while (true) {
+        if (WiFi.status() == WL_CONNECTED) {
+            if (!client.connected()) {
+                reconnect();
+            }
+            client.loop();
+
+            StaticJsonDocument<200> jsonDoc;
+
+            xSemaphoreTake(sensorDataMutex, portMAX_DELAY);
+            jsonDoc["medidor-laser"]["value"] = (laserSensorConnected) ? laserDistance : -1;
+            jsonDoc["medidor-ultrasonido"]["value"] = (ultrasonicSensorConnected) ? ultrasonicDistance : -1;
+            xSemaphoreGive(sensorDataMutex);
+
+            String jsonOutput;
+            serializeJson(jsonDoc, jsonOutput);
+            client.publish(mqtt_topic, jsonOutput.c_str());
+            Serial.println("Datos enviados a MQTT: " + jsonOutput);
+        }
+
+        delay(500);  // Publicar los datos cada 500 ms
+    }
 }
 
 void setup() {
@@ -182,6 +246,8 @@ void setup() {
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     pinMode(TRIG_PIN, OUTPUT);
     pinMode(ECHO_PIN, INPUT);
+
+    sensorDataMutex = xSemaphoreCreateMutex();
 
     loadStringFromEEPROM(EEPROM_WIFI_SSID_ADDR, wifi_ssid, EEPROM_WIFI_SSID_SIZE);
     if (strlen(wifi_ssid) == 0) {
@@ -308,47 +374,14 @@ void setup() {
 
     server.begin();
     Serial.println("Servidor HTTP iniciado");
+
+    // Iniciar tareas en diferentes núcleos
+    xTaskCreatePinnedToCore(measureSensors, "MeasureSensors", 4096, NULL, 1, NULL, 0); // Núcleo 0
+    xTaskCreatePinnedToCore(mqttPublish, "MQTTPublish", 4096, NULL, 1, NULL, 1); // Núcleo 1
 }
 
 void loop() {
-    checkButton();
-
-    if (WiFi.status() == WL_CONNECTED) {
-        if (!client.connected()) {
-            reconnect();
-        }
-        client.loop();
-
-        // Leer el sensor láser si está conectado
-        if (laserSensorConnected) {
-            laserDistance = laserSensor.read();
-            Serial.print("Distancia del sensor láser: ");
-            Serial.println(laserDistance);
-        }
-
-        // Leer el sensor ultrasónico si está conectado
-        ultrasonicDistance = readUltrasonicDistance();
-        if (ultrasonicDistance <= 0) {
-            ultrasonicSensorConnected = false;
-            Serial.println("Error al leer el sensor ultrasónico!");
-        } else {
-            ultrasonicSensorConnected = true;
-            Serial.print("Distancia del sensor ultrasónico: ");
-            Serial.println(ultrasonicDistance);
-        }
-
-        // Publicar datos en MQTT
-        StaticJsonDocument<200> jsonDoc;
-        jsonDoc["medidor-laser"]["value"] = (laserSensorConnected) ? laserDistance : -1; // Enviar -1 si no está conectado
-        jsonDoc["medidor-ultrasonido"]["value"] = (ultrasonicSensorConnected) ? ultrasonicDistance : -1; // Enviar -1 si no está conectado
-
-        String jsonOutput;
-        serializeJson(jsonDoc, jsonOutput);
-        client.publish(mqtt_topic, jsonOutput.c_str());
-        Serial.println("Datos enviados a MQTT: " + jsonOutput);
-
-        // Esperar 0.5 segundos antes de la siguiente lectura
-        delay(500);
-    }
+    checkButton();  // Este loop sigue manejando el botón en el núcleo 1
 }
+
 
