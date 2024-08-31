@@ -1,4 +1,3 @@
-
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
 #include <WiFi.h>
@@ -20,6 +19,7 @@ const int mqtt_port = 1883;
 const char* mqtt_topic = "dicaproduct/sensorica/flujostato/token/635354772v2";
 
 // Variables para compartir entre los núcleos
+float voltageMeasured = 0.0;
 float currentMeasured = 0.0;
 bool dataReady = false;
 SemaphoreHandle_t xSemaphore;
@@ -27,14 +27,18 @@ SemaphoreHandle_t xSemaphore;
 // Funciones en Core 1 (Tarea de medición)
 void TaskMeasure(void *pvParameters) {
     for (;;) {
-        float current = leerCorrientePromedio(0, 10);
+        voltageMeasured = leerVoltajePromedio(0, 10);
 
-        Serial.print("Corriente medida (sin calibrar): ");
-        Serial.println(current);
+        // Convertir el voltaje a corriente (mA)
+        currentMeasured = (voltageMeasured / 5.0) * 16.0;
+
+        Serial.print("Voltaje medido: ");
+        Serial.println(voltageMeasured);
+        Serial.print("Corriente medida (mA): ");
+        Serial.println(currentMeasured);
 
         // Proteger acceso compartido a variables
         xSemaphoreTake(xSemaphore, portMAX_DELAY);
-        currentMeasured = current;
         dataReady = true;
         xSemaphoreGive(xSemaphore);
 
@@ -53,7 +57,7 @@ void TaskMQTT(void *pvParameters) {
         // Verificar si los datos están listos para ser enviados
         xSemaphoreTake(xSemaphore, portMAX_DELAY);
         if (dataReady) {
-            enviarMQTT(currentMeasured);
+            enviarMQTT(voltageMeasured, currentMeasured);
             dataReady = false;
         }
         xSemaphoreGive(xSemaphore);
@@ -64,7 +68,13 @@ void TaskMQTT(void *pvParameters) {
 
 void setup() {
     Serial.begin(115200);
-    ads.begin();
+    if (!ads.begin()) {
+        Serial.println("Error: ADS1115 no detectado. Verifique la conexión.");
+        while (1); // Detener ejecución si no se detecta el ADS1115
+    } else {
+        Serial.println("ADS1115 detectado correctamente.");
+    }
+
     setup_wifi();
     client.setServer(mqtt_server, mqtt_port);
 
@@ -97,35 +107,25 @@ void loop() {
     // No hacemos nada aquí porque estamos usando tareas de FreeRTOS
 }
 
-// Función para leer la corriente promedio con anti-ruido
-float leerCorrientePromedio(int channel, int samples) {
+// Función para leer el voltaje promedio en bruto
+float leerVoltajePromedio(int channel, int samples) {
     int32_t sum = 0;
     for (int i = 0; i < samples; i++) {
         sum += ads.readADC_SingleEnded(channel);
         delay(1); // Pequeño retraso entre lecturas.
     }
 
-    // Configura la ganancia para un rango de ±6.144V
-    ads.setGain(GAIN_TWOTHIRDS);
+    // Convertimos el promedio a voltaje
+    float voltage = (sum / (float)samples) * (6.144 / 32768.0); // Para rango de ±6.144V
 
-    // Convertir la lectura cruda del ADC a voltaje
-    float voltage = (sum / (float)samples) * (6.144 / 32768.0);
-    Serial.print("Voltaje calculado: ");
-    Serial.println(voltage);
-
-    // Convertir el voltaje a corriente en mA (asumiendo que 0V = 4mA y 5V = 20mA)
-    float current = (voltage / 5.0) * 16.0;
-    Serial.print("Corriente calculada (mA): ");
-    Serial.println(current);
-
-    return current; // Devolver la corriente en mA
+    return voltage; // Devolver el voltaje medido
 }
 
-
 // Función para enviar los datos a través de MQTT
-void enviarMQTT(float current) {
+void enviarMQTT(float voltage, float current) {
     StaticJsonDocument<100> doc;
-    doc["value_ma"] = current;
+    doc["Voltaje"] = voltage;
+    doc["Corriente_mA"] = current;
 
     char msg[100];
     serializeJson(doc, msg);
@@ -173,3 +173,4 @@ void reconnect() {
         }
     }
 }
+
