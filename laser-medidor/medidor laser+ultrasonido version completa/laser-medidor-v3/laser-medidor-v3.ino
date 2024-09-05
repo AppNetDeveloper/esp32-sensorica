@@ -44,11 +44,11 @@ bool laserSensorConnected = true;
 long ultrasonicDistance = 0;
 bool ultrasonicSensorConnected = true;
 
-const int numReadings = 10;   // Número de lecturas para promediar
-long readings[numReadings];   // Arreglo para almacenar las lecturas
-int readIndex = 0;            // Índice para la posición actual en el arreglo
-long total = 0;               // Total de todas las lecturas
-long average = 0;             // Promedio de las lecturas
+const int numReadings = 20; // Aumentar el número de lecturas para promediar
+long readings[numReadings];  // Arreglo para almacenar las lecturas
+int readIndex = 0;           // Índice para la posición actual en el arreglo
+long total = 0;              // Total de todas las lecturas
+long average = 0;            // Promedio de las lecturas
 
 char mqtt_topic[EEPROM_TOPIC_SIZE];
 char mqtt_server[16];
@@ -61,6 +61,11 @@ bool setupMode = false;
 unsigned long buttonPressStartTime = 0;
 
 SemaphoreHandle_t sensorDataMutex;
+
+// Parámetros de filtrado
+
+
+
 
 void saveStringToEEPROM(int addr, const char* data, int maxSize) {
     EEPROM.begin(EEPROM_SIZE);
@@ -174,6 +179,21 @@ void checkButton() {
     }
 }
 
+const long maxSaltoPermitido = 2400;  // Máximo salto permitido entre lecturas consecutivas
+const long minAlturaPalet = 200;  // Altura mínima esperada de un pallet
+const long maxAlturaPalet = 3100;  // Altura máxima esperada (sin pallet)
+long ultimaLecturaUltrasonido = maxAlturaPalet;  // Suponemos que la cinta está inicialmente vacía (3100 mm)
+
+const float factorCalibracion = 1.0;  // Factor de calibración
+
+const long tolerancia = 100;  // Tolerancia para lecturas de variaciones pequeñas
+const int lecturasEstablesNecesarias = 5;  // Lecturas fallidas consecutivas necesarias para considerar error
+const int numLecturasParaPromedio = 5;  // Número de lecturas consecutivas para el promedio móvil
+
+int lecturasConsecutivasErroneas = 0;  // Contador de lecturas fallidas consecutivas
+long lecturas[numLecturasParaPromedio];  // Arreglo para almacenar las lecturas recientes
+int indiceLectura = 0;  // Índice actual en el arreglo de lecturas
+
 long readUltrasonicDistance() {
     digitalWrite(TRIG_PIN, LOW);
     delayMicroseconds(2);
@@ -181,18 +201,75 @@ long readUltrasonicDistance() {
     delayMicroseconds(10);
     digitalWrite(TRIG_PIN, LOW);
 
-    long duration = pulseIn(ECHO_PIN, HIGH);
-    long distance = duration * 0.34 / 2; // Convertir a mm
+    long duration = pulseIn(ECHO_PIN, HIGH, 30000);  // Timeout de 30ms
 
-    // Filtrado de ruido
-    total = total - readings[readIndex];       // Restar la lectura más antigua
-    readings[readIndex] = distance;            // Guardar la nueva lectura
-    total = total + readings[readIndex];       // Agregar la nueva lectura al total
-    readIndex = (readIndex + 1) % numReadings; // Avanzar al siguiente índice
+    // Si el sensor no detecta nada, aumentar el contador de lecturas fallidas
+    if (duration == 0) {
+        lecturasConsecutivasErroneas++;
+        if (lecturasConsecutivasErroneas >= lecturasEstablesNecesarias) {
+            ultrasonicSensorConnected = false;  // Considerar sensor desconectado tras varias lecturas fallidas
+            return -1;  // Indicar error
+        } else {
+            return calcularPromedio();  // Devolver el promedio de las últimas lecturas válidas
+        }
+    } else {
+        lecturasConsecutivasErroneas = 0;  // Resetear el contador si la lectura es válida
+        ultrasonicSensorConnected = true;
+    }
 
-    average = total / numReadings; // Calcular el promedio
+    // Calcular la distancia en milímetros
+    long distance = duration * 0.34 / 2;
 
-    return average; // Retornar la distancia promedio
+    // Aplicar el factor de calibración
+    distance *= factorCalibracion;
+
+    // Limitar la distancia a un rango esperado para pallets
+    if (distance < minAlturaPalet || distance > maxAlturaPalet) {
+        distance = calcularPromedio();  // Mantener el promedio si está fuera del rango esperado
+    }
+
+    // Guardar la lectura en el arreglo de lecturas recientes
+    lecturas[indiceLectura] = distance;
+    indiceLectura = (indiceLectura + 1) % numLecturasParaPromedio;  // Avanzar el índice circularmente
+
+    // Retornar el promedio suavizado de las lecturas recientes
+    return calcularPromedio();
+}
+
+long calcularPromedio() {
+    long suma = 0;
+    for (int i = 0; i < numLecturasParaPromedio; i++) {
+        suma += lecturas[i];
+    }
+    return suma / numLecturasParaPromedio;
+}
+
+long filtrarLecturas(long* lecturas, int numLecturas) {
+    long suma = 0;
+    long promedio = 0;
+    int lecturasValidas = 0;
+
+    // Calcular el promedio de todas las lecturas
+    for (int i = 0; i < numLecturas; i++) {
+        suma += lecturas[i];
+    }
+    promedio = suma / numLecturas;
+
+    // Volver a sumar solo las lecturas que están dentro de la tolerancia
+    suma = 0;
+    for (int i = 0; i < numLecturas; i++) {
+        if (abs(lecturas[i] - promedio) <= tolerancia) {  // Filtrar valores fuera de la tolerancia
+            suma += lecturas[i];
+            lecturasValidas++;
+        }
+    }
+
+    // Si hay lecturas válidas, calcular un nuevo promedio
+    if (lecturasValidas > 0) {
+        return suma / lecturasValidas;
+    } else {
+        return promedio;  // Si no hay lecturas válidas, devolver el promedio inicial
+    }
 }
 
 void measureSensors(void* parameter) {
@@ -226,20 +303,31 @@ void mqttPublish(void* parameter) {
 
             StaticJsonDocument<200> jsonDoc;
 
+            // Tomar los datos de los sensores con mutex para evitar conflictos de lectura
             xSemaphoreTake(sensorDataMutex, portMAX_DELAY);
-            jsonDoc["medidor-laser"]["value"] = (laserSensorConnected) ? laserDistance : -1;
-            jsonDoc["medidor-ultrasonido"]["value"] = (ultrasonicSensorConnected) ? ultrasonicDistance : -1;
+            int laserValue = (laserSensorConnected) ? laserDistance : -1;
+            int ultrasonicValue = (ultrasonicSensorConnected) ? ultrasonicDistance : -1;
             xSemaphoreGive(sensorDataMutex);
 
-            String jsonOutput;
-            serializeJson(jsonDoc, jsonOutput);
-            client.publish(mqtt_topic, jsonOutput.c_str());
-            Serial.println("Datos enviados a MQTT: " + jsonOutput);
+            // Si ambos sensores devuelven -1, no se publica nada
+            if (laserValue == -1 && ultrasonicValue == -1) {
+                Serial.println("Ambos sensores desconectados. No se envían datos.");
+            } else {
+                // Crear el JSON con los valores de los sensores si alguno está conectado
+                jsonDoc["medidor-laser"]["value"] = laserValue;
+                jsonDoc["medidor-ultrasonido"]["value"] = ultrasonicValue;
+
+                String jsonOutput;
+                serializeJson(jsonDoc, jsonOutput);
+                client.publish(mqtt_topic, jsonOutput.c_str());
+                Serial.println("Datos enviados a MQTT: " + jsonOutput);
+            }
         }
 
         delay(500);  // Publicar los datos cada 500 ms
     }
 }
+
 
 void setup() {
     Serial.begin(115200);
@@ -383,5 +471,3 @@ void setup() {
 void loop() {
     checkButton();  // Este loop sigue manejando el botón en el núcleo 1
 }
-
-
