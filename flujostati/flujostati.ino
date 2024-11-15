@@ -11,8 +11,8 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 // Configuración del WiFi
-const char* ssid = "Lss";
-const char* password = "cvlss2101281613";
+const char* ssid = "AKOBOX";
+const char* password = "12345678";
 
 // Configuración del servidor MQTT
 const char* mqtt_server = "152.53.18.231";

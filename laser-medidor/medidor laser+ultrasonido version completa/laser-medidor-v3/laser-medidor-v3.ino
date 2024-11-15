@@ -9,8 +9,8 @@
 #include <ESPmDNS.h>
 #include <DNSServer.h>
 
-#define DEFAULT_SSID "Lss"
-#define DEFAULT_PASSWORD "cvlss2101281613"
+#define DEFAULT_SSID "WALMACEN"
+#define DEFAULT_PASSWORD "Dic20942323"
 
 #define EEPROM_SIZE 512
 #define EEPROM_TOPIC_ADDR 0

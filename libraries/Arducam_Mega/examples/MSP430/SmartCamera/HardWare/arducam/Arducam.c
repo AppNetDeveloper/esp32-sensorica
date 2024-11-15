@@ -67,7 +67,6 @@
 #define CAM_REG_DEBUG_REGISTER_HIGH   				0X0B
 #define CAM_REG_DEBUG_REGISTER_LOW    				0X0C
 #define CAM_REG_DEBUG_REGISTER_VALUE  				0X0D
-#define CAM_REG_DEBUG_REGISTER_VALUE_L				0X0E
 
 #define CAM_REG_SENSOR_STATE_IDLE (1<<1)
 #define CAM_SENSOR_RESET_ENABLE   (1<<6)
@@ -570,7 +569,7 @@ void cameraWaitI2cIdle(ArducamCamera*camera)
 {
 	while ((readReg(camera,CAM_REG_SENSOR_STATE)&0X03) != CAM_REG_SENSOR_STATE_IDLE)
 	{
-		;//arducamDelayMs(2);
+		arducamDelayMs(2);
 	}
 }
 
@@ -589,60 +588,12 @@ void cameraDebugWriteRegister(ArducamCamera* camera,uint8_t* buff)
 
 void cameraLowPowerOn(ArducamCamera*camera)
 {
-	if((camera->cameraId ==  SENSOR_5MP_2) ||(camera->cameraId ==  SENSOR_3MP_2 ) ){
-        uint16_t reg1  =  0x0028;
-        uint16_t data1 =  0xD000;
-        uint16_t reg2  =  0x002A;
-        uint16_t data2 =  0x107E;
-        uint16_t reg3  =  0x0F12;
-        uint16_t data3 =  0x0001;
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_HIGH, (reg1>>8)&0xFF); waitI2cIdle(camera);   
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_LOW,  (reg1)&0xFF);   waitI2cIdle(camera); 
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE_H, (data1>>8)&0xFF);  waitI2cIdle(camera);
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE, (data1)&0xFF);     waitI2cIdle(camera); 
-
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_HIGH, (reg2>>8)&0xFF); waitI2cIdle(camera);   
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_LOW,  (reg2)&0xFF);   waitI2cIdle(camera); 
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE_H, (data2>>8)&0xFF);  waitI2cIdle(camera);
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE, (data2)&0xFF);     waitI2cIdle(camera); 
-
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_HIGH, (reg3>>8)&0xFF); waitI2cIdle(camera);   
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_LOW,  (reg3)&0xFF);   waitI2cIdle(camera); 
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE_H, (data3>>8)&0xFF);  waitI2cIdle(camera);
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE, (data3)&0xFF);     waitI2cIdle(camera); 
-    
-    }else{
-        writeReg(camera, CAM_REG_POWER_CONTROL, 0X07);
-    }
+	writeReg(camera,CAM_REG_POWER_CONTROL,0X07);
 }
 
 void cameraLowPowerOff(ArducamCamera*camera)
 {
-	   if((camera->cameraId ==  SENSOR_5MP_2) ||(camera->cameraId ==  SENSOR_3MP_2 ) ){
-        uint16_t reg1  =  0x0028;
-        uint16_t data1 =  0xD000;
-        uint16_t reg2  =  0x002A;
-        uint16_t data2 =  0x107E;
-        uint16_t reg3  =  0x0F12;
-        uint16_t data3 =  0x0000;
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_HIGH, (reg1>>8)&0xFF); waitI2cIdle(camera);   
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_LOW,  (reg1)&0xFF);   waitI2cIdle(camera); 
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE_H, (data1>>8)&0xFF);  waitI2cIdle(camera);
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE, (data1)&0xFF);     waitI2cIdle(camera); 
-
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_HIGH, (reg2>>8)&0xFF); waitI2cIdle(camera);   
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_LOW,  (reg2)&0xFF);   waitI2cIdle(camera); 
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE_H, (data2>>8)&0xFF);  waitI2cIdle(camera);
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE, (data2)&0xFF);     waitI2cIdle(camera); 
-
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_HIGH, (reg3>>8)&0xFF); waitI2cIdle(camera);   
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_LOW,  (reg3)&0xFF);   waitI2cIdle(camera); 
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE_H, (data3>>8)&0xFF);  waitI2cIdle(camera);
-        writeReg(camera, CAM_REG_DEBUG_REGISTER_VALUE, (data3)&0xFF);     waitI2cIdle(camera); 
-
-    }else{
-        writeReg(camera, CAM_REG_POWER_CONTROL, 0X05);
-    }
+	writeReg(camera,CAM_REG_POWER_CONTROL,0X05);
 }
 
 

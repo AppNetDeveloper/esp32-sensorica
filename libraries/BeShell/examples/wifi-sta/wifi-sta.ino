@@ -27,18 +27,20 @@
 
 #include <BeShell.hpp>
 
-be::BeShell beshell ;
+using namespace be ;
+
+BeShell beshell ;
 
 void setup() {  
   
   // 应用 WiFi 模块
-  beshell.use<be::WiFi>() ;
+  beshell.use<WiFi>() ;
 
   // 应用 FS 模块
-  beshell.use<be::FS>() ;
+  beshell.use<FS>() ;
 
   // 将 flash 上的名为 ffat 的分区挂载到 / 目录
-  be::FS::mount("/", new be::FatFS("ffat",true)) ;
+  FS::mount("/", new FatFS("ffat",true)) ;
 
   // 启动 BeShell
   beshell.setup() ;
