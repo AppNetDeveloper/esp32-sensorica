@@ -18,7 +18,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 // Parámetros para el filtrado de lecturas (6 lecturas para calcular la mediana)
-const int NUM_READINGS = 12;
+const int NUM_READINGS = 10;
 volatile int readings[NUM_READINGS];   // Arreglo para almacenar las lecturas
 volatile int readingIndex = 0;           // Índice actual
 volatile int filteredValue = 0;          // Valor mediano calculado
@@ -33,9 +33,9 @@ SemaphoreHandle_t sensorMutex;
 
 // Parámetros para reconexión MQTT con backoff exponencial
 unsigned long lastReconnectAttempt = 0;
-unsigned long baseReconnectInterval = 5000; // 5 segundos
+unsigned long baseReconnectInterval = 1000; // 1 segundos
 int reconnectAttempts = 0;
-const int maxReconnectAttempts = 12;         // Máximo (por ejemplo, 5 * 2^6 = 320 segundos de espera máximo)
+const int maxReconnectAttempts = 10;         // Máximo (por ejemplo, 1 * 2^6 = 120 segundos de espera máximo)
 
 // Para reinicio periódico del sensor
 unsigned long lastSensorRestart = 0;
@@ -257,4 +257,10 @@ void reinitSensor() {
     Serial.println("Error al reiniciar el sensor.");
   }
 }
+void reiniciarESP32() {
+  Serial.println("Reiniciando ESP32...");
+  delay(1000);  // Pequeño retardo para que se impriman los mensajes
+  ESP.restart();
+}
+
 
