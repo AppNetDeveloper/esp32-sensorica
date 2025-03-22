@@ -5,7 +5,7 @@
 #include <FS.h>
 
 #define DBG_OUTPUT_PORT     Serial
-#define LOG_LEVEL           2         // (0 disable, 1 error, 2 info, 3 debug)
+#define LOG_LEVEL           1         // (0 disable, 1 error, 2 info, 3 debug)
 #include "SerialLog.h"
 
 //default values
@@ -53,7 +53,7 @@
     #include "esp_task_wdt.h"
     #include "sys/stat.h"
     #include <WiFi.h>
-    #include <ESPmDNS.h>
+    #include <mdns.h>
     #include <HTTPUpdateServer.h>
     #include <WebServer.h>
     using WebServerClass = WebServer;
@@ -279,11 +279,6 @@ private:
     char            m_version[16] = {__TIME__};
     IPAddress       m_captiveIp = IPAddress(192, 168, 4, 1);
     ServerWebSocket*  m_websocket;
-
-    #if defined(ESP32)
-    // Override default handleClient() method to increase connection speed
-    void handleClient() override;
-    #endif
 
     // Default handler for all URIs not defined above, use it to read files from filesystem
     bool captivePortal();

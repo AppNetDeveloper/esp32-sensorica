@@ -68,7 +68,7 @@ Define and initialize you class
   - `ctrl.bind("html_id", start_value );` if you need to bind and init for sending on connection
   - `ctrl.bind("html_id", start_value, changeFunction);` if you need also to handle changes
 
-+ in your setup specify if you want ot auto send key initial values during web socket connection.
++ in your setup specify if you want to auto send key initial values during web socket connection.
   - `ctrl.setAutoSendOnCon("html_id",true /* send: enable/disable */);`
   - `ctrl.put("html_id", value);  // Set a default value to be send`
 
@@ -95,7 +95,8 @@ Define and initialize you class
 ## ControlAssist control functions
 Controlling your elements inside you loop function
 
-+ Change the values of html elements
++ Change the values of html elements. 
+
   - `ctrl.put("html_id", value,  /* forceSend: send even no change */, /* forceAdd: add key if not exists */ );`
 
 + Read current value of html element
@@ -106,6 +107,8 @@ Controlling your elements inside you loop function
 
 + Inside your main loop() call ControlAssist loop() to handle web sockets server clients
   - `ctrl.loop();`
+
+##### Note that when a html control is "binded" (linked to some backend variable), the library checks whether the new value in ctrl.put differs from the previous send or initial value. If there’s no change, ControlAssist by default does not resend the same value to conserve bandwidth. You can use ``forceSend`` in ctrl.put to send even if there is no change. This optimization is particularly important in applications where frequent updates could lead to performance bottlenecks or excessive network usage (e.g., sliders, real-time monitoring systems, or IoT dashboards).
 
 
 ## JavaScript handlers inside your webpage
@@ -129,7 +132,11 @@ See example ``ControlAssist-Gauge.ino``
 In you application you use **LOG_E**, **LOG_W**, **LOG_I**, **LOG_D** macros instead of **Serial.prinf** to print your messages. **ControlAssist** displays these messages with **timestamps**
 
 You can define log level for each module
-```#define LOGGER_LOG_LEVEL 4```
+```
+#define LOGGER_LOG_LEVEL 4
+or
+build_flags = -DLOGGER_LOG_LEVEL=5
+```
 ```
 #define _LOG_LEVEL_NONE      (0)
 #define _LOG_LEVEL_ERROR     (1)
@@ -143,8 +150,9 @@ You can define log level for each module
 Download library files and place them on ./libraries directory under ArduinoProjects
 Then include the **ControlAssist.h** in your application and compile..
 
-+ compile for arduino-esp3 or arduino-esp8266.
++ Compile for arduino-esp32 or arduino-esp8266.
 + In order to compile you must install **WebSocketsServer** library.
++ Use compiler flags build_flags = -DCA_USE_LITTLEFS to use LITTLEFS instead of SPIFFS
 
 
 ###### If you get compilation errors on arduino-esp32 you need to update your arduino-esp32 library in the IDE using Boards Manager

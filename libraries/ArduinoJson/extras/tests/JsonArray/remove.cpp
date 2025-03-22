@@ -1,5 +1,5 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2024, Benoit BLANCHON
+// Copyright © 2014-2025, Benoit BLANCHON
 // MIT License
 
 #include <ArduinoJson.h>
@@ -66,6 +66,12 @@ TEST_CASE("JsonArray::remove()") {
     REQUIRE(2 == array.size());
     REQUIRE(array[0] == 1);
     REQUIRE(array[1] == 2);
+  }
+
+  SECTION("remove end()") {
+    array.remove(array.end());
+
+    REQUIRE(3 == array.size());
   }
 
   SECTION("In a loop") {

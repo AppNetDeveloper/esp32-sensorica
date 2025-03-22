@@ -1,5 +1,5 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2024, Benoit BLANCHON
+// Copyright © 2014-2025, Benoit BLANCHON
 // MIT License
 
 #include <ArduinoJson.h>
@@ -175,15 +175,6 @@ TEST_CASE("unsigned char[]") {
       REQUIRE("world"_s == obj[key]);
     }
 #endif
-
-    SECTION("containsKey()") {
-      unsigned char key[] = "hello";
-
-      JsonDocument doc;
-      deserializeJson(doc, "{\"hello\":\"world\"}");
-      JsonObject obj = doc.as<JsonObject>();
-      REQUIRE(true == obj.containsKey(key));
-    }
 
     SECTION("remove()") {
       unsigned char key[] = "hello";

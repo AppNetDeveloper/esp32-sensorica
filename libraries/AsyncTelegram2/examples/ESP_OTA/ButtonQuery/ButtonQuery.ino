@@ -5,6 +5,7 @@
   Description: an example that check for incoming messages
               and install rom update remotely.
 */
+
 #include <AsyncTelegram2.h>
 #ifndef LED_BUILTIN
 #define LED_BUILTIN 2
@@ -22,6 +23,7 @@
   Session   session;
   X509List  certificate(telegram_cert);
 #elif defined(ESP32)
+  #include <WiFi.h>
   #include <HTTPClient.h>
   #include <HTTPUpdate.h>  
   #define UPDATER httpUpdate
@@ -106,7 +108,7 @@ void loop() {
         if (msg.document.file_exists) {
 
           // Check file extension of received document (firmware MUST be .bin)
-          if (document.endsWith(".bin") > -1 ) {
+          if (document.endsWith(".bin")) {
             String report = "Start firmware update?\nFile name: "
                             + String(msg.document.file_name)
                             + "\nFile size: "

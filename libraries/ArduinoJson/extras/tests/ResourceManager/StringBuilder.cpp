@@ -1,9 +1,8 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2024, Benoit BLANCHON
+// Copyright © 2014-2025, Benoit BLANCHON
 // MIT License
 
 #include <ArduinoJson/Memory/StringBuilder.hpp>
-#include <ArduinoJson/Memory/VariantPoolImpl.hpp>
 #include <catch.hpp>
 
 #include "Allocators.hpp"

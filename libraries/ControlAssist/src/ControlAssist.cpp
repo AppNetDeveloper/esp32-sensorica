@@ -22,7 +22,7 @@ ControlAssist::ControlAssist(uint16_t port)
 
 // Start websockets
 void ControlAssist::begin(){
-  if(!_wsEnabled){
+  if(!_wsEnabled && (WiFi.isConnected() || WiFi.softAPSSID() != "" )){
     startWebSockets();
     _wsEnabled = true;
   }
@@ -264,7 +264,7 @@ int ControlAssist::bind(const char* key, const char* val, WebSocketServerEvent e
     LOG_E("Bind key: %s failed. Already exists in pos %i!\n", key,  p);
     return -1;
   }
-  ctrlPairs ctrl = { key, val, ev, false };
+  ctrlPairs ctrl = { key, val, ev, true };
   LOG_D("Binding key: '%s', val:  %s, chn: %02i\n", key, val, _ctrls.size() + 1);
   add(ctrl);
   return getKeyNdx(key);

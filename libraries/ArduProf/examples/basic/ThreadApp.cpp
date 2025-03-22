@@ -17,7 +17,6 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#pragma once
 #include "./ThreadApp.h"
 #include "./AppContext.h"
 
@@ -49,7 +48,7 @@ static StackType_t xStack[TASK_STACK_SIZE];
 static StaticTask_t xTaskBuffer;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
-ThreadApp::ThreadApp() : ThreadBase(TASK_QUEUE_SIZE, ucQueueStorageArea, &xStaticQueue),
+ThreadApp::ThreadApp() : ardufreertos::ThreadBase(TASK_QUEUE_SIZE, ucQueueStorageArea, &xStaticQueue),
                          handlerMap()
 {
     _instance = this;

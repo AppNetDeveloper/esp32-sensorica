@@ -1,5 +1,5 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2024, Benoit BLANCHON
+// Copyright © 2014-2025, Benoit BLANCHON
 // MIT License
 
 #pragma once
@@ -91,7 +91,7 @@ class MsgPackDeserializer {
 
     if (code <= 0x7f || code >= 0xe0) {  // fixint
       if (allowValue)
-        variant->setInteger(static_cast<int8_t>(code));
+        variant->setInteger(static_cast<int8_t>(code), resources_);
       return DeserializationError::Ok;
     }
 
@@ -230,13 +230,16 @@ class MsgPackDeserializer {
 
     if (isSigned) {
       auto truncatedValue = static_cast<JsonInteger>(signedValue);
-      if (truncatedValue == signedValue)
-        variant->setInteger(truncatedValue);
+      if (truncatedValue == signedValue) {
+        if (!variant->setInteger(truncatedValue, resources_))
+          return DeserializationError::NoMemory;
+      }
       // else set null on overflow
     } else {
       auto truncatedValue = static_cast<JsonUInt>(unsignedValue);
       if (truncatedValue == unsignedValue)
-        variant->setInteger(truncatedValue);
+        if (!variant->setInteger(truncatedValue, resources_))
+          return DeserializationError::NoMemory;
       // else set null on overflow
     }
 
@@ -254,7 +257,7 @@ class MsgPackDeserializer {
       return err;
 
     fixEndianness(value);
-    variant->setFloat(value);
+    variant->setFloat(value, resources_);
 
     return DeserializationError::Ok;
   }
@@ -270,9 +273,10 @@ class MsgPackDeserializer {
       return err;
 
     fixEndianness(value);
-    variant->setFloat(value);
-
-    return DeserializationError::Ok;
+    if (variant->setFloat(value, resources_))
+      return DeserializationError::Ok;
+    else
+      return DeserializationError::NoMemory;
   }
 
   template <typename T>
@@ -289,7 +293,7 @@ class MsgPackDeserializer {
 
     doubleToFloat(i, o);
     fixEndianness(value);
-    variant->setFloat(value);
+    variant->setFloat(value, resources_);
 
     return DeserializationError::Ok;
   }
@@ -460,10 +464,11 @@ ARDUINOJSON_BEGIN_PUBLIC_NAMESPACE
 
 // Parses a MessagePack input and puts the result in a JsonDocument.
 // https://arduinojson.org/v7/api/msgpack/deserializemsgpack/
-template <typename TDestination, typename... Args>
-detail::enable_if_t<detail::is_deserialize_destination<TDestination>::value,
-                    DeserializationError>
-deserializeMsgPack(TDestination&& dst, Args&&... args) {
+template <typename TDestination, typename... Args,
+          detail::enable_if_t<
+              detail::is_deserialize_destination<TDestination>::value, int> = 0>
+inline DeserializationError deserializeMsgPack(TDestination&& dst,
+                                               Args&&... args) {
   using namespace detail;
   return deserialize<MsgPackDeserializer>(detail::forward<TDestination>(dst),
                                           detail::forward<Args>(args)...);
@@ -471,10 +476,11 @@ deserializeMsgPack(TDestination&& dst, Args&&... args) {
 
 // Parses a MessagePack input and puts the result in a JsonDocument.
 // https://arduinojson.org/v7/api/msgpack/deserializemsgpack/
-template <typename TDestination, typename TChar, typename... Args>
-detail::enable_if_t<detail::is_deserialize_destination<TDestination>::value,
-                    DeserializationError>
-deserializeMsgPack(TDestination&& dst, TChar* input, Args&&... args) {
+template <typename TDestination, typename TChar, typename... Args,
+          detail::enable_if_t<
+              detail::is_deserialize_destination<TDestination>::value, int> = 0>
+inline DeserializationError deserializeMsgPack(TDestination&& dst, TChar* input,
+                                               Args&&... args) {
   using namespace detail;
   return deserialize<MsgPackDeserializer>(detail::forward<TDestination>(dst),
                                           input,

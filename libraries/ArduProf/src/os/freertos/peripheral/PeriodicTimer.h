@@ -18,24 +18,30 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #pragma once
-#include <Arduino.h>
+#include <stdint.h>
+// #include <Arduino.h>
 #include "./SoftwareTimer.h"
 
-#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C3
-class PeriodicTimer : public SoftwareTimer
+#if defined ARDUPROF_FREERTOS
+
+namespace ardufreertos
 {
-public:
-    PeriodicTimer(const char *pcTimerName,
-                  const TickType_t xTimerPeriodInTicks,
-                  TimerCallbackFunction_t pxCallbackFunction) : SoftwareTimer(pcTimerName,
-                                                                              xTimerPeriodInTicks,
-                                                                              pdTRUE, // auto-reload when expire.
-                                                                              nullptr,
-                                                                              pxCallbackFunction)
+    class PeriodicTimer : public SoftwareTimer
     {
-    }
+    public:
+        PeriodicTimer(const char *pcTimerName,
+                      const TickType_t xTimerPeriodInTicks,
+                      TimerCallbackFunction_t pxCallbackFunction) : SoftwareTimer(pcTimerName,
+                                                                                  xTimerPeriodInTicks,
+                                                                                  pdTRUE, // auto-reload when expire.
+                                                                                  nullptr,
+                                                                                  pxCallbackFunction)
+        {
+        }
 
-private:
-};
+    private:
+    };
 
-#endif
+} // namespace ardufreertos
+
+#endif // ARDUPROF_FREERTOS

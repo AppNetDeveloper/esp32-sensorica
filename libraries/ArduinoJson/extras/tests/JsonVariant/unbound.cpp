@@ -1,5 +1,5 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2024, Benoit BLANCHON
+// Copyright © 2014-2025, Benoit BLANCHON
 // MIT License
 
 #include <ArduinoJson.h>
@@ -71,10 +71,6 @@ TEST_CASE("Unbound JsonVariant") {
     CHECK_FALSE(variant[0].set(1));
     CHECK_FALSE(variant["key"].set(1));
     CHECK_FALSE(variant["key"_s].set(1));
-  }
-
-  SECTION("containsKey()") {
-    CHECK_FALSE(variant.containsKey("hello"));
   }
 
   SECTION("remove()") {

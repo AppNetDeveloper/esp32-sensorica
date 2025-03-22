@@ -1,4 +1,4 @@
-/* Copyright 2023 teamprof.net@gmail.com
+/* Copyright 2024 teamprof.net@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this
  * software and associated documentation files (the "Software"), to deal in the Software
@@ -18,16 +18,32 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #pragma once
-#include <Arduino.h>
 
-#define LIB_MAJOR_VER 1
+#if defined ARDUINO
+#include <Arduino.h>
+#else
+#include <stdint.h>
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////
+// v1.0: first release
+// v1.2: add namespace freertos
+// v1.3: support esp-idf toolchain
+// v1.4: prepare for zephyr
+// v2.0: support mbed
+#define LIB_MAJOR_VER 2
 #define LIB_MINOR_VER 0
+////////////////////////////////////////////////////////////////////////////////////////////
 
 #define dim(x) (sizeof(x) / sizeof(x[0]))
 #define sizeofarray(a) (sizeof(a) / sizeof(a[0]))
 
 static_assert(sizeof(void *) == sizeof(uint32_t), "sizeof(void *) == sizeof(uint32_t)");
 static_assert(sizeof(unsigned long) == sizeof(uint32_t), "sizeof(unsigned long) == sizeof(uint32_t)");
+
+#ifndef UNUSED
+#define UNUSED(x) ((void)(x))
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 #ifndef STR_INDIR
@@ -37,3 +53,5 @@ static_assert(sizeof(unsigned long) == sizeof(uint32_t), "sizeof(unsigned long) 
 #ifndef STR
 #define STR(x) STR_INDIR(x)
 #endif
+
+#define ARDUPROF_VER STR(LIB_MAJOR_VER) "." STR(LIB_MINOR_VER)

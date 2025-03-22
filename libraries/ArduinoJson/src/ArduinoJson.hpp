@@ -1,5 +1,5 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2024, Benoit BLANCHON
+// Copyright © 2014-2025, Benoit BLANCHON
 // MIT License
 
 #pragma once
@@ -37,12 +37,12 @@
 #include "ArduinoJson/Array/Utilities.hpp"
 #include "ArduinoJson/Collection/CollectionImpl.hpp"
 #include "ArduinoJson/Memory/ResourceManagerImpl.hpp"
-#include "ArduinoJson/Memory/VariantPoolImpl.hpp"
 #include "ArduinoJson/Object/MemberProxy.hpp"
 #include "ArduinoJson/Object/ObjectImpl.hpp"
 #include "ArduinoJson/Variant/ConverterImpl.hpp"
 #include "ArduinoJson/Variant/JsonVariantCopier.hpp"
 #include "ArduinoJson/Variant/VariantCompare.hpp"
+#include "ArduinoJson/Variant/VariantImpl.hpp"
 #include "ArduinoJson/Variant/VariantRefBaseImpl.hpp"
 
 #include "ArduinoJson/Json/JsonDeserializer.hpp"

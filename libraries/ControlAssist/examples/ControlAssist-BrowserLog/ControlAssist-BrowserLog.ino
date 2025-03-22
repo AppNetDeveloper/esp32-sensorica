@@ -8,28 +8,30 @@
   #define WEB_SERVER ESP8266WebServer
 #endif
 
-const char st_ssid[]="";                // Put connection SSID here. On empty an AP will be started
-const char st_pass[]="";                // Put your wifi passowrd.
+const char st_ssid[]="mdk3";                // Put connection SSID here. On empty an AP will be started
+const char st_pass[]="2843028858";                // Put your wifi passowrd.
 unsigned long pingMillis = millis();    // Ping millis
-
 
 #define LOGGER_LOG_MODE  3              // Set default logging mode using external function
 #define LOGGER_LOG_LEVEL 5              // Define log level for this module
 static void _log_printf(const char *format, ...);  // Custom log function, defined in weblogger.h
 
+bool logToFile = true;                  // Set to false to disable log file
+
 #include <ControlAssist.h>              // Control assist class
 #include "remoteLogViewer.h"            // Web based remote log page using web sockets
 
 WEB_SERVER server(80);                  // Web server on port 80
+
 RemoteLogViewer remoteLogView(85);      // The remote live log viewer page
 
+uint32_t loopNo = 0;
 
-// Log debug info
 void debugMemory(const char* caller) {
   #if defined(ESP32)
-    LOG_D("%s > Free: heap %u, block: %u, pSRAM %u\n", caller, ESP.getFreeHeap(), heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), ESP.getFreePsram());
+    LOG_D("%s %i> Free: heap %u, block: %u, pSRAM %u\n", caller, ++loopNo, ESP.getFreeHeap(), heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), ESP.getFreePsram());
   #else
-    LOG_D("%s > Free: heap %u\n", caller, ESP.getFreeHeap());
+    LOG_D("%s %i > Free: heap %u\n", caller, ++loopNo, ESP.getFreeHeap());
   #endif
 }
 
@@ -38,9 +40,19 @@ void setup() {
   Serial.print("\n\n\n\n");
   Serial.flush();
 
+  if(logToFile){
+    if (!STORAGE.begin()) {
+      Serial.println("An Error has occurred while mounting SPIFFS");
+      return;
+    }else{
+      Serial.println("Storage statred.");
+    }
+    LOGGER_OPEN_LOG();
+  }
+
   // Setup the remote web debugger in order to store log lines, url "/log"
   // When no connection is present store log lines in a buffer until connection
-  remoteLogView.setup();
+  remoteLogView.init();
 
   LOG_I("Starting..\n");
   // Connect WIFI ?
@@ -72,23 +84,21 @@ void setup() {
     if (MDNS.begin(hostName.c_str()))  LOG_V("AP MDNS responder Started\n");
   }
 
-  // Start web lgo viewer sockets
+
   remoteLogView.begin();
   LOG_I("RemoteLogViewer started.\n");
 
   // Setup webserver
   server.on("/", []() {
-    server.send(200, "text/html", "<h1>This is root page</h1><br><a target='_new' href='/log'>View log</a>");
+    server.send(200, "text/html", "<h1>This is root page</h1><br><a target='_new' href='/log'>View log</a>&nbsp;&nbsp;<a target='_new' href='/logFile'>View log file</a>&nbsp;&nbsp;<a target='_new' href='/logFile?reset=1'>Reset log file</a>");
   });
 
-  // Setup log handler
-  server.on("/log", []() {
-    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-    String res = "";
-    while( remoteLogView.getHtmlChunk(res) ){
-      server.sendContent(res);
-    }
-    server.sendContent("");
+  server.on("/log", []() {             // Setup log handler
+    remoteLogView.handleLog(server);
+  });
+
+  server.on("/logFile", []() {         // Setup log file handler
+    remoteLogView.handleLogFile(server);
   });
 
   // Start webserver

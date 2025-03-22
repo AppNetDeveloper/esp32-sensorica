@@ -17,7 +17,6 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#pragma once
 #include "./ThreadApp.h"
 #include "./AppContext.h"
 
@@ -48,7 +47,7 @@ static StackType_t xStack[TASK_STACK_SIZE];
 static StaticTask_t xTaskBuffer;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
-ThreadApp::ThreadApp() : ThreadBase(TASK_QUEUE_SIZE, ucQueueStorageArea, &xStaticQueue),
+ThreadApp::ThreadApp() : ardufreertos::ThreadBase(TASK_QUEUE_SIZE, ucQueueStorageArea, &xStaticQueue),
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C3
                          _timer1Hz("Timer 1Hz",
                                    pdMS_TO_TICKS(1000),

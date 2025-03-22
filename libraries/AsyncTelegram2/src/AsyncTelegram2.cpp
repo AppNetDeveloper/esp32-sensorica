@@ -102,12 +102,18 @@ bool AsyncTelegram2::sendCommand(const char *command, const char *payload, bool 
         // Blocking mode
         if (blocking)
         {
+            // Wait data (with timeout)
+            uint32_t timeout = millis() + 1000;
+            while (!telegramClient->available() && millis() < timeout) ;
+
+            // Skip headers
             if (!telegramClient->find((char *)HEADERS_END))
             {
                 log_error("Invalid HTTP response");
                 telegramClient->stop();
                 return false;
             }
+
             // If there are incoming bytes available from the server, read them and print them:
             m_rxbuffer = "";
             while (telegramClient->available())
@@ -115,6 +121,7 @@ bool AsyncTelegram2::sendCommand(const char *command, const char *payload, bool 
                 yield();
                 m_rxbuffer += (char)telegramClient->read();
             }
+
             m_waitingReply = false;
             if (m_rxbuffer.indexOf("\"ok\":true") > -1)
                 return true;
@@ -142,7 +149,7 @@ bool AsyncTelegram2::getUpdates()
         if (m_waitingReply == false)
         {
             char payload[BUFFER_SMALL];
-            snprintf(payload, BUFFER_SMALL, "{\"limit\":1,\"timeout\":0,\"offset\":%" INT32 "}", m_lastUpdateId);
+            snprintf(payload, BUFFER_SMALL, "{\"limit\":1,\"timeout\":0,\"offset\":%"PRIu32"}", m_lastUpdateId);
             sendCommand("getUpdates", payload);
         }
     }
@@ -264,7 +271,7 @@ MessageType AsyncTelegram2::getNewMessage(TBMessage &message)
         updateDoc.shrinkToFit();
 
         m_rxbuffer = "";
-        if (!updateDoc.containsKey("result"))
+        if (!updateDoc["result"])
         {
             log_error("JSON data not expected");
             serializeJsonPretty(updateDoc, Serial);
@@ -663,8 +670,12 @@ bool AsyncTelegram2::sendDocument(int64_t chat_id, Stream &stream, size_t size,
         return sendStream(chat_id, "sendPhoto", "image/jpeg", "photo", stream, size, filename, caption);
     case AUDIO:
         return sendStream(chat_id, "sendDocument", "audio/mp3", "audio", stream, size, filename, caption);
-    default:
+    case VOICE:
+        return sendStream(chat_id, "sendVoice", "audio/ogg", "voice", stream, size, filename, caption);
+    case TEXT:
         return sendStream(chat_id, "sendDocument", "text/plain", "document", stream, size, filename, caption);
+    default: // BINARY
+        return sendStream(chat_id, "sendDocument", "application/octet-stream", "document", stream, size, filename, caption);
     }
 
     return false;

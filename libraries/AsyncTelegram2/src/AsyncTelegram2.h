@@ -40,13 +40,6 @@
 #endif
 
 
-// int 32 bit long, (eg. ESP32 platform)
-#if INT_MAX == 2147483647
-    #define INT32 "d"
-#else
-   #define INT32 "ld"
-#endif
-
 /*
     This affect only inline keyboard with at least one callback function defined.
     If you need more than MAX_INLINEKYB_CB distinct keybords with
@@ -208,7 +201,9 @@ public:
         VOICE,
         VIDEO,
         CSV,
-        JSON
+        JSON,
+        TEXT,
+        BINARY
     };
     bool sendDocument(int64_t chat_id, Stream &stream, size_t size,
                         DocumentType doc, const char *filename, const char *caption = nullptr);

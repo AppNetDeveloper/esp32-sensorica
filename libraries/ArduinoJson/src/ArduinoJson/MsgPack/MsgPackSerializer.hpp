@@ -1,5 +1,5 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2024, Benoit BLANCHON
+// Copyright © 2014-2025, Benoit BLANCHON
 // MIT License
 
 #pragma once
@@ -61,8 +61,8 @@ class MsgPackSerializer : public VariantDataVisitor<size_t> {
 
     auto slotId = array.head();
     while (slotId != NULL_SLOT) {
-      auto slot = resources_->getSlot(slotId);
-      slot->data()->accept(*this);
+      auto slot = resources_->getVariant(slotId);
+      slot->accept(*this, resources_);
       slotId = slot->next();
     }
 
@@ -83,9 +83,8 @@ class MsgPackSerializer : public VariantDataVisitor<size_t> {
 
     auto slotId = object.head();
     while (slotId != NULL_SLOT) {
-      auto slot = resources_->getSlot(slotId);
-      visit(slot->key());
-      slot->data()->accept(*this);
+      auto slot = resources_->getVariant(slotId);
+      slot->accept(*this, resources_);
       slotId = slot->next();
     }
 
@@ -97,7 +96,7 @@ class MsgPackSerializer : public VariantDataVisitor<size_t> {
   }
 
   size_t visit(JsonString value) {
-    ARDUINOJSON_ASSERT(value != NULL);
+    ARDUINOJSON_ASSERT(!value.isNull());
 
     auto n = value.size();
 
@@ -219,7 +218,9 @@ ARDUINOJSON_BEGIN_PUBLIC_NAMESPACE
 
 // Produces a MessagePack document.
 // https://arduinojson.org/v7/api/msgpack/serializemsgpack/
-template <typename TDestination>
+template <
+    typename TDestination,
+    detail::enable_if_t<!detail::is_pointer<TDestination>::value, int> = 0>
 inline size_t serializeMsgPack(JsonVariantConst source, TDestination& output) {
   using namespace ArduinoJson::detail;
   return serialize<MsgPackSerializer>(source, output);

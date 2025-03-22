@@ -1,5 +1,5 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2024, Benoit BLANCHON
+// Copyright © 2014-2025, Benoit BLANCHON
 // MIT License
 
 #include <ArduinoJson.h>
@@ -196,6 +196,47 @@ TEST_CASE(
 
   SECTION("bin 8") {
     DeserializationError err = deserializeMsgPack(doc, "\xC4\x01X", 3);
+    REQUIRE(err == DeserializationError::NoMemory);
+  }
+}
+
+TEST_CASE(
+    "deserializeMsgPack() returns NoMemory if extension allocation fails") {
+  JsonDocument doc(FailingAllocator::instance());
+
+  SECTION("uint32_t should pass") {
+    auto err = deserializeMsgPack(doc, "\xceXXXX");
+
+    REQUIRE(err == DeserializationError::Ok);
+  }
+
+  SECTION("uint64_t should fail") {
+    auto err = deserializeMsgPack(doc, "\xcfXXXXXXXX");
+
+    REQUIRE(err == DeserializationError::NoMemory);
+  }
+
+  SECTION("int32_t should pass") {
+    auto err = deserializeMsgPack(doc, "\xd2XXXX");
+
+    REQUIRE(err == DeserializationError::Ok);
+  }
+
+  SECTION("int64_t should fail") {
+    auto err = deserializeMsgPack(doc, "\xd3XXXXXXXX");
+
+    REQUIRE(err == DeserializationError::NoMemory);
+  }
+
+  SECTION("float should pass") {
+    auto err = deserializeMsgPack(doc, "\xcaXXXX");
+
+    REQUIRE(err == DeserializationError::Ok);
+  }
+
+  SECTION("double should fail") {
+    auto err = deserializeMsgPack(doc, "\xcbXXXXXXXX");
+
     REQUIRE(err == DeserializationError::NoMemory);
   }
 }
