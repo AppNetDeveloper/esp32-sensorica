@@ -130,7 +130,8 @@ void loop() {
   // Reinicio periódico del sensor cada 30 minutos
   if (millis() - lastSensorRestart >= sensorRestartInterval) {
     Serial.println("Reinicio programado del sensor...");
-    reinitSensor();
+    //reinitSensor();
+    ESP.restart();
     lastSensorRestart = millis();
   }
   delay(10);
