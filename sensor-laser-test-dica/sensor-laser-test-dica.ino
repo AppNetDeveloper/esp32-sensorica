@@ -1,54 +1,70 @@
-#include <Wire.h>
-#include <VL53L1X.h>
-#include <WiFi.h>
+#include <ETH.h>
+#include <WiFi.h> // Se necesita para definir WiFiClient y el sistema de eventos, aunque no usemos el hardware WiFi.
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-// Instancia para el sensor de distancia
-VL53L1X sensor;
+// -- INICIO: NUEVA SECCIÓN DE CONFIGURACIÓN DEL SENSOR --
 
-// Configuración de red WiFi
-const char* ssid = "Lss";
-const char* password = "cvlss2101281613";
+// Pines para el sensor de ultrasonido impermeable JSN-SR04T
+#define TRIG_PIN 15
+#define ECHO_PIN 14
+
+// -- FIN: NUEVA SECCIÓN DE CONFIGURACIÓN DEL SENSOR --
+
+
+// -- INICIO: SECCIÓN DE CONFIGURACIÓN ETHERNET PARA WT32-ETH01 --
+
+// NUEVO: Configuración para IP Estática. ¡DEBES CAMBIAR ESTOS VALORES!
+IPAddress staticIP(192, 168, 1, 124); // La IP que quieres para tu ESP32
+IPAddress gateway(192, 168, 1, 1);    // La IP de tu router
+IPAddress subnet(255, 255, 255, 0);  // La máscara de subred de tu red
+IPAddress dns1(8, 8, 8, 8);            // Servidor DNS primario (Google)
+IPAddress dns2(8, 8, 4, 4);            // Servidor DNS secundario (Google)
+
+// Configuración específica y verificada para la placa WT32-ETH01
+#define ETH_PHY_TYPE   ETH_PHY_LAN8720
+#define ETH_PHY_ADDR   1
+#define ETH_PHY_POWER  16  // El pin de alimentación del PHY en la WT32-ETH01 es el GPIO 16
+#define ETH_PHY_MDC    23
+#define ETH_PHY_MDIO   18
+#define ETH_CLK_MODE   ETH_CLOCK_GPIO0_IN // El modo de reloj para la WT32-ETH01 es entrada en GPIO 0
+
+// Variable para saber si estamos conectados a la red
+static bool eth_connected = false;
+
+// -- FIN: SECCIÓN DE CONFIGURACIÓN ETHERNET --
+
 
 // Configuración de MQTT
-const char* mqtt_server = "arm1.appnet.dev";
-const char* mqtt_topic = "sensor/distance2";
+const char* mqtt_server = "192.168.1.29";
+const char* mqtt_topic = "sensor/distance/corte/1"; //ojo se cambia topico
+
+// La librería PubSubClient necesita una instancia de WiFiClient (que es compatible con ETH).
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Parámetros para el filtrado de lecturas (6 lecturas para calcular la mediana)
+// El resto de tus variables globales permanece igual
 const int NUM_READINGS = 10;
-volatile int readings[NUM_READINGS];   // Arreglo para almacenar las lecturas
-volatile int readingIndex = 0;           // Índice actual
-volatile int filteredValue = 0;          // Valor mediano calculado
-
-// Bandera para indicar que hay nuevo dato listo para publicar
+volatile int readings[NUM_READINGS];
+volatile int readingIndex = 0;
+volatile int filteredValue = 0;
 volatile bool newDataAvailable = false;
-// Para llevar un control del último valor publicado (opcional)
 volatile int lastPublishedValue = -1;
-
-// Mutex para proteger variables compartidas entre tareas
 SemaphoreHandle_t sensorMutex;
 
-// Parámetros para reconexión MQTT con backoff exponencial
-unsigned long lastReconnectAttempt = 0;
-unsigned long baseReconnectInterval = 1000; // 1 segundos
-int reconnectAttempts = 0;
-const int maxReconnectAttempts = 10;         // Máximo (por ejemplo, 1 * 2^6 = 120 segundos de espera máximo)
-
-// Para reinicio periódico del sensor
+unsigned long startupTimestamp = 0; // Para el watchdog de conexión Ethernet
 unsigned long lastSensorRestart = 0;
-const unsigned long sensorRestartInterval = 1800000; // Cada 30 minutos
+const unsigned long sensorRestartInterval = 1800000;
 
 // Prototipos de tareas y funciones
-void conectarWiFi();
+void WiFiEvent(WiFiEvent_t event);
 bool reconectarMQTT();
-void reinitSensor();
 void sensorTask(void *pvParameters);
 void mqttTask(void *pvParameters);
+void reiniciarESP32();
 
-// Función auxiliar para ordenar un arreglo pequeño (burbuja)
+
+// El resto de tus funciones auxiliares (sortArray, calcularMediana, etc.) no necesitan cambios.
 void sortArray(int arr[], int n) {
   for (int i = 0; i < n - 1; i++) {
     for (int j = 0; j < n - i - 1; j++) {
@@ -60,8 +76,6 @@ void sortArray(int arr[], int n) {
     }
   }
 }
-
-// Función para calcular la mediana de NUM_READINGS elementos (para número par se promedian los dos centrales)
 int calcularMediana(int arr[], int n) {
   int temp[n];
   for (int i = 0; i < n; i++) {
@@ -70,198 +84,230 @@ int calcularMediana(int arr[], int n) {
   sortArray(temp, n);
   return (temp[n/2 - 1] + temp[n/2]) / 2;
 }
-
-// Función para generar un clientId único basado en la MAC del ESP32
 String generarClientId() {
-  uint64_t mac = ESP.getEfuseMac();
+  uint8_t mac[6];
+  ETH.macAddress(mac); // Usamos la MAC de Ethernet
   char id[25];
-  sprintf(id, "ESP32Client-%llX", mac);
+  sprintf(id, "ESP32Client-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   return String(id);
 }
 
+
 void setup() {
   Serial.begin(115200);
-  
-  // Inicializamos el mutex
+  delay(500); // Pequeña pausa para que el monitor serie se estabilice
+  Serial.println("\n\n--- INICIANDO DISPOSITIVO SENSOR (WT32-ETH01) ---");
+
   sensorMutex = xSemaphoreCreateMutex();
+
+  // Configuración de pines para el sensor de ultrasonido
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
   
-  // Conexión a la red WiFi
-  conectarWiFi();
+  // -- INICIO: INICIALIZACIÓN DE RED --
   
-  // Configurar el servidor MQTT
-  client.setServer(mqtt_server, 1883);
+  Serial.println("Configurando conexión Ethernet con IP estática...");
+  WiFi.onEvent(WiFiEvent); 
   
-  // Inicializar el sensor en modo continuo con 10 ms entre lecturas
-  Wire.begin(21, 22);
-  sensor.setTimeout(500);
-  if (sensor.init()) {
-    sensor.startContinuous(10); // Lectura cada 10 ms
-    Serial.println("Sensor conectado.");
-  } else {
-    Serial.println("Sensor: No se ha detectado.");
+  // NUEVO: Aplicamos la configuración de IP estática ANTES de iniciar la conexión.
+  if (!ETH.config(staticIP, gateway, subnet, dns1, dns2)) {
+    Serial.println("Error al configurar la IP estática para Ethernet.");
   }
   
+  Serial.println("Intentando conectar a la red por RJ45...");
+  ETH.begin(ETH_PHY_TYPE, ETH_PHY_ADDR, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_POWER, ETH_CLK_MODE);
+  
+  // -- FIN: INICIALIZACIÓN DE RED --
+
+  client.setServer(mqtt_server, 1883);
+
+  Serial.println("Sensor de ultrasonido JSN-SR04T configurado.");
+  Serial.println("------------------------------------");
+
+  startupTimestamp = millis(); // Guardamos el momento del arranque para el watchdog
   lastSensorRestart = millis();
-  
-  // Crear tarea para la lectura del sensor en el núcleo 0
-  xTaskCreatePinnedToCore(
-    sensorTask,    // Función de la tarea
-    "Sensor Task", // Nombre de la tarea
-    10000,         // Tamaño del stack
-    NULL,          // Parámetros
-    1,             // Prioridad
-    NULL,          // Handle (no se utiliza)
-    0              // Ejecutar en el núcleo 0
-  );
-  
-  // Crear tarea para el manejo de MQTT en el núcleo 1
-  xTaskCreatePinnedToCore(
-    mqttTask,
-    "MQTT Task",
-    10000,
-    NULL,
-    1,
-    NULL,
-    1              // Ejecutar en el núcleo 1
-  );
+
+  // Creación de tareas (sin cambios)
+  xTaskCreatePinnedToCore(sensorTask, "Sensor Task", 10000, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(mqttTask, "MQTT Task", 10000, NULL, 1, NULL, 1);
 }
 
 void loop() {
-  // Reinicio periódico del sensor cada 30 minutos
-  if (millis() - lastSensorRestart >= sensorRestartInterval) {
-    Serial.println("Reinicio programado del sensor...");
-    //reinitSensor();
-    ESP.restart();
-    lastSensorRestart = millis();
+  // Watchdog para la conexión Ethernet. Si en 5 minutos no hay IP, reinicia.
+  if (!eth_connected && startupTimestamp > 0 && (millis() - startupTimestamp > 300000)) { // 300000 ms = 5 minutos
+      Serial.println("WATCHDOG: No se pudo obtener conexión Ethernet en 5 minutos. Reiniciando...");
+      reiniciarESP32();
   }
-  delay(10);
+
+  // Mantenemos el reinicio periódico general como medida de seguridad adicional
+  if (millis() - lastSensorRestart >= sensorRestartInterval) { // 30 minutos
+    Serial.println("WATCHDOG: Reinicio programado por tiempo (30 min).");
+    reiniciarESP32();
+  }
+  delay(1000); 
 }
 
-// Tarea para la lectura del sensor (núcleo 0)
+// Tarea para leer el sensor de ultrasonido (compatible con JSN-SR04T en modo por defecto)
 void sensorTask(void *pvParameters) {
+  long duration;
+  int distance;
+
   for (;;) {
-    int lectura = sensor.readRangeContinuousMillimeters();
-    if (!sensor.timeoutOccurred()) {
-      // Proteger acceso al arreglo y al índice
-      if (xSemaphoreTake(sensorMutex, (TickType_t) 10) == pdTRUE) {
-        readings[readingIndex] = lectura;
-        readingIndex++;
-        xSemaphoreGive(sensorMutex);
-        
-        Serial.print("Lectura: ");
-        Serial.println(lectura);
-        
-        // Cuando se acumulen al menos NUM_READINGS lecturas, calcular la mediana
-        if (readingIndex >= NUM_READINGS) {
-          if (xSemaphoreTake(sensorMutex, (TickType_t) 10) == pdTRUE) {
-            int med = calcularMediana((int*)readings, NUM_READINGS);
-            filteredValue = med;          // Se asigna la nueva mediana
-            newDataAvailable = true;        // Se activa la bandera para publicar
-            Serial.print("Nueva mediana calculada: ");
-            Serial.println(filteredValue);
-            readingIndex = 0;  // Reiniciar el contador
-            xSemaphoreGive(sensorMutex);
+    // Generar el pulso de disparo (trigger)
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+
+    // Medir la duración del pulso de eco (echo)
+    duration = pulseIn(ECHO_PIN, HIGH, 1000000); // Timeout de 1 segundo
+
+    // Calcular la distancia en milímetros
+    distance = duration * 0.343 / 2;
+    
+    // Proteger acceso al arreglo y al índice
+    if (xSemaphoreTake(sensorMutex, (TickType_t) 10) == pdTRUE) {
+      readings[readingIndex] = distance;
+      readingIndex++;
+      xSemaphoreGive(sensorMutex);
+      
+      // Cuando se acumulen las lecturas, calcular la mediana
+      if (readingIndex >= NUM_READINGS) {
+        if (xSemaphoreTake(sensorMutex, (TickType_t) 10) == pdTRUE) {
+          int med = calcularMediana((int*)readings, NUM_READINGS);
+          filteredValue = med;
+          newDataAvailable = true;
+          readingIndex = 0;
+          xSemaphoreGive(sensorMutex);
+        }
+      }
+    }
+    
+    // Espera 60 ms para la siguiente lectura para asegurar estabilidad del sensor
+    vTaskDelay(60 / portTICK_PERIOD_MS);
+  }
+}
+
+// Tarea MQTT con lógica de reinicio por watchdog
+void mqttTask(void *pvParameters) {
+  unsigned long lastPublishTime = 0;
+  unsigned long nextReconnectAttempt = 0;
+  long reconnectInterval = 5000; // Intervalo inicial de 5 segundos
+  const long maxReconnectInterval = 300000; // Intervalo máximo de 5 minutos
+
+  for (;;) {
+    // Primero, nos aseguramos de tener conexión a la red local.
+    if (!eth_connected) {
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+      continue;
+    }
+
+    // Si no estamos conectados al broker MQTT, gestionamos la reconexión.
+    if (!client.connected()) {
+      // Solo intentamos reconectar si ha pasado el tiempo de espera.
+      if (millis() > nextReconnectAttempt) {
+        Serial.println("MQTT > Conexión perdida. Intentando reconectar...");
+        if (reconectarMQTT()) {
+          // Éxito. Reiniciamos el intervalo para la próxima vez.
+          reconnectInterval = 5000;
+          nextReconnectAttempt = 0;
+        } else {
+          // Si el último intento fue con el intervalo máximo, reiniciamos.
+          if (reconnectInterval >= maxReconnectInterval) {
+            Serial.println("WATCHDOG: No se pudo reconectar a MQTT después de 5 minutos. Reiniciando...");
+            reiniciarESP32();
           }
+
+          // Fallo. Programamos el próximo intento con un intervalo mayor.
+          nextReconnectAttempt = millis() + reconnectInterval;
+          // Doblamos el intervalo para el siguiente intento (backoff)
+          reconnectInterval *= 2;
+          if (reconnectInterval > maxReconnectInterval) {
+            reconnectInterval = maxReconnectInterval; // Limitamos el intervalo máximo
+          }
+          Serial.print("MQTT > El intento de reconexión falló. Próximo intento en ");
+          Serial.print(reconnectInterval / 1000);
+          Serial.println(" segundos.");
         }
       }
     } else {
-      Serial.println("Sensor: TIMEOUT");
+      // Si estamos conectados, mantenemos la conexión activa.
+      client.loop();
     }
-    // Espera 30 ms para la siguiente lectura
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-// Tarea para manejo de MQTT (núcleo 1)
-void mqttTask(void *pvParameters) {
-  unsigned long lastPublishTime = millis();
-  for (;;) {
-    // Procesamos la comunicación MQTT
-    client.loop();
     
-    // Cada 500 ms revisamos si hay dato pendiente para publicar
-    if (millis() - lastPublishTime >= 500) {
+    // La lógica de publicación solo se ejecuta si estamos conectados.
+    if (client.connected() && millis() - lastPublishTime >= 500) {
       lastPublishTime = millis();
       
       if (newDataAvailable) {
-        // Si no está conectado, intenta reconectar usando un clientId único
-        if (!client.connected()) {
-          if (!reconectarMQTT()) {
-            Serial.println("No se pudo reconectar a MQTT.");
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-            continue;
-          }
-        }
-        
-        // Construimos el mensaje JSON con el valor filtrado
         StaticJsonDocument<200> doc;
         char jsonBuffer[512];
         doc["value"] = filteredValue;
         serializeJson(doc, jsonBuffer);
         
-        Serial.print("Publicando valor: ");
+        Serial.print("MQTT > Publicando valor: ");
         Serial.println(jsonBuffer);
         
-        // Intentamos publicar
-        if (client.publish(mqtt_topic, jsonBuffer)) {
-          Serial.print("Datos enviados: ");
-          Serial.println(jsonBuffer);
-          lastPublishedValue = filteredValue;
-          newDataAvailable = false;
-        } else {
-          Serial.println("Error al enviar datos, MQTT desconectado. Se reintentará...");
+        if (!client.publish(mqtt_topic, jsonBuffer)) {
+          Serial.println("MQTT > Error al publicar. La conexión puede haberse perdido.");
         }
+        newDataAvailable = false;
       }
     }
+    
+    // Pequeña pausa para no saturar el núcleo
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 
-// Función para conectar a la red WiFi
-void conectarWiFi() {
-  Serial.print("Conectando a ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Conectando a WiFi...");
+// Manejador de eventos de red (sin cambios)
+void WiFiEvent(WiFiEvent_t event) {
+  switch (event) {
+    case ARDUINO_EVENT_ETH_START:
+      Serial.println("LOG RED > ETH Iniciado");
+      ETH.setHostname("wt32-eth01-sensor"); 
+      break;
+    case ARDUINO_EVENT_ETH_CONNECTED:
+      Serial.println("LOG RED > Cable de red enchufado.");
+      break;
+    case ARDUINO_EVENT_ETH_GOT_IP:
+      Serial.println("LOG RED > ¡CONEXIÓN ESTABLECIDA!");
+      Serial.print("LOG RED >   MAC: ");
+      Serial.println(ETH.macAddress());
+      Serial.print("LOG RED >   IPv4: ");
+      Serial.println(ETH.localIP());
+      Serial.print("LOG RED >   Velocidad: ");
+      Serial.print(ETH.linkSpeed());
+      Serial.println("Mbps");
+      if (ETH.fullDuplex()) {
+        Serial.println("LOG RED >   Modo: Full Duplex");
+      }
+      Serial.println("------------------------------------");
+      eth_connected = true;
+      break;
+    case ARDUINO_EVENT_ETH_DISCONNECTED:
+      Serial.println("LOG RED > Cable de red desenchufado.");
+      eth_connected = false;
+      break;
+    default:
+      break;
   }
-  Serial.println("WiFi conectado.");
-  Serial.print("Dirección IP: ");
-  Serial.println(WiFi.localIP());
 }
 
-// Función para reconectar el cliente MQTT (sin sesión persistente, usando client id único)
+
+// Función para reconectar a MQTT (ahora solo hace un intento)
 bool reconectarMQTT() {
   String clientId = generarClientId();
-  Serial.print("Intentando reconectar a MQTT con ClientID: ");
+  Serial.print("MQTT > Intentando conectar con ClientID: ");
   Serial.println(clientId);
-  if (client.connect(clientId.c_str())) { // Conexión simple, clean session
-    Serial.println("Conectado al broker MQTT");
-    client.subscribe(mqtt_topic);
-    return true;
-  } else {
-    Serial.print("Fallo la conexión, rc=");
-    Serial.println(client.state());
-    return false;
-  }
+  return client.connect(clientId.c_str());
 }
 
-// Función para reiniciar el sensor
-void reinitSensor() {
-  sensor.stopContinuous();
-  delay(100);
-  if (sensor.init()) {
-    sensor.startContinuous(10);
-    Serial.println("Sensor reiniciado con éxito.");
-  } else {
-    Serial.println("Error al reiniciar el sensor.");
-  }
-}
+
 void reiniciarESP32() {
   Serial.println("Reiniciando ESP32...");
-  delay(1000);  // Pequeño retardo para que se impriman los mensajes
+  delay(1000);
   ESP.restart();
 }
-
 

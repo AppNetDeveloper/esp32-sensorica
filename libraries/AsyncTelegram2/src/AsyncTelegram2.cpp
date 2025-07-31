@@ -149,7 +149,7 @@ bool AsyncTelegram2::getUpdates()
         if (m_waitingReply == false)
         {
             char payload[BUFFER_SMALL];
-            snprintf(payload, BUFFER_SMALL, "{\"limit\":1,\"timeout\":0,\"offset\":%"PRIu32"}", m_lastUpdateId);
+            snprintf(payload, BUFFER_SMALL, "{\"limit\":1,\"timeout\":0,\"offset\":%" PRIu32 "}", m_lastUpdateId);
             sendCommand("getUpdates", payload);
         }
     }
@@ -914,4 +914,15 @@ bool AsyncTelegram2::editMessage(int64_t chat_id, int32_t message_id, const Stri
     String payload;
     serializeJson(root, payload);
     return sendCommand("editMessageText", payload.c_str());
+}
+
+bool AsyncTelegram2::deleteMessage(int64_t chat_id, int32_t message_id)
+{
+  DynamicJsonDocument root(m_JsonBufferSize);
+  root["chat_id"] = chat_id;
+  root["message_id"] = message_id;
+  root.shrinkToFit();
+  String payload;
+  serializeJson(root, payload);
+  return sendCommand("deleteMessage", payload.c_str());
 }
