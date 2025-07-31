@@ -47,10 +47,11 @@ void setBeacon() {
                   eddystoneTLM.getTemp() / 256,
                   eddystoneTLM.getTemp() % 256 * 100 / 256);
 
-    NimBLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
-    NimBLEAdvertisementData oScanResponseData  = BLEAdvertisementData();
+    NimBLEAdvertisementData        oAdvertisementData = BLEAdvertisementData();
+    NimBLEAdvertisementData        oScanResponseData  = BLEAdvertisementData();
+    NimBLEEddystoneTLM::BeaconData beaconData         = eddystoneTLM.getData();
     oScanResponseData.setServiceData(NimBLEUUID("FEAA"),
-                                     reinterpret_cast<const uint8_t*>(&eddystoneTLM.getData()),
+                                     reinterpret_cast<const uint8_t*>(&beaconData),
                                      sizeof(NimBLEEddystoneTLM::BeaconData));
 
     oAdvertisementData.setName("ESP32 TLM Beacon");
@@ -66,7 +67,7 @@ void setup() {
     Serial.printf("Deep sleep (%llds since last reset, %llds since last boot)\n",
                   nowTimeStruct.tv_sec,
                   nowTimeStruct.tv_sec - last);
-    last      = nowTimeStruct.tv_sec;
+    last = nowTimeStruct.tv_sec;
 
     NimBLEDevice::init("TLMBeacon");
     NimBLEDevice::setPower(BEACON_POWER);

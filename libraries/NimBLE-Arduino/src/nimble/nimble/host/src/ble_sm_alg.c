@@ -30,7 +30,7 @@
 #include "ble_hs_priv.h"
 
 #if MYNEWT_VAL(BLE_CRYPTO_STACK_MBEDTLS)
-#include "mbedtls/aes.h"
+#include "nimble/ext/tinycrypt/include/tinycrypt/aes.h"
 
 #if MYNEWT_VAL(BLE_SM_SC)
 #include "mbedtls/cipher.h"
@@ -45,9 +45,9 @@
 #include "nimble/ext/tinycrypt/include/tinycrypt/aes.h"
 #include "nimble/ext/tinycrypt/include/tinycrypt/constants.h"
 #include "nimble/ext/tinycrypt/include/tinycrypt/utils.h"
+#include "nimble/ext/tinycrypt/include/tinycrypt/cmac_mode.h"
 
 #if MYNEWT_VAL(BLE_SM_SC)
-#include "nimble/ext/tinycrypt/include/tinycrypt/cmac_mode.h"
 #include "nimble/ext/tinycrypt/include/tinycrypt/ecc_dh.h"
 #if MYNEWT_VAL(TRNG)
 #include "trng/trng.h"
@@ -240,16 +240,6 @@ done:
     return rc;
 }
 
-#if MYNEWT_VAL(BLE_SM_SC)
-
-static void
-ble_sm_alg_log_buf(const char *name, const uint8_t *buf, int len)
-{
-    BLE_HS_LOG(DEBUG, "    %s=", name);
-    ble_hs_log_flat_buf(buf, len);
-    BLE_HS_LOG(DEBUG, "\n");
-}
-
 /**
  * Cypher based Message Authentication Code (CMAC) with AES 128 bit
  *
@@ -320,6 +310,16 @@ ble_sm_alg_aes_cmac(const uint8_t *key, const uint8_t *in, size_t len,
     return 0;
 }
 #endif
+
+#if MYNEWT_VAL(BLE_SM_SC)
+
+static void
+ble_sm_alg_log_buf(const char *name, const uint8_t *buf, int len)
+{
+    BLE_HS_LOG(DEBUG, "    %s=", name);
+    ble_hs_log_flat_buf(buf, len);
+    BLE_HS_LOG(DEBUG, "\n");
+}
 
 int
 ble_sm_alg_f4(const uint8_t *u, const uint8_t *v, const uint8_t *x,
@@ -510,11 +510,12 @@ ble_sm_alg_g2(const uint8_t *u, const uint8_t *v, const uint8_t *x,
     ble_sm_alg_log_buf("res", xs, 16);
 
     *passkey = get_be32(xs + 12) % 1000000;
-    BLE_HS_LOG(DEBUG, "    passkey=%" PRIu32"\n", *passkey);
+    BLE_HS_LOG(DEBUG, "    passkey=%" PRIu32 "\n", *passkey);
 
     return 0;
 }
 
+#if !CONFIG_BT_LE_CONTROLLER_NPL_OS_PORTING_SUPPORT
 int
 ble_sm_alg_gen_dhkey(const uint8_t *peer_pub_key_x, const uint8_t *peer_pub_key_y,
                      const uint8_t *our_priv_key, uint8_t *out_dhkey)
@@ -598,11 +599,11 @@ exit:
     }
 
 #else
-    if (uECC_valid_public_key(pk, &curve_secp256r1) < 0) {
+    if (uECC_valid_public_key(pk, uECC_secp256r1()) < 0) {
         return BLE_HS_EUNKNOWN;
     }
 
-    rc = uECC_shared_secret(pk, priv, dh, &curve_secp256r1);
+    rc = uECC_shared_secret(pk, priv, dh, uECC_secp256r1());
     if (rc == TC_CRYPTO_FAIL) {
         return BLE_HS_EUNKNOWN;
     }
@@ -611,13 +612,16 @@ exit:
     swap_buf(out_dhkey, dh, 32);
     return 0;
 }
+#endif
 
+#if !CONFIG_BT_LE_CONTROLLER_NPL_OS_PORTING_SUPPORT
 /* based on Core Specification 4.2 Vol 3. Part H 2.3.5.6.1 */
 static const uint8_t ble_sm_alg_dbg_priv_key[32] = {
     0x3f, 0x49, 0xf6, 0xd4, 0xa3, 0xc5, 0x5f, 0x38, 0x74, 0xc9, 0xb3, 0xe3,
     0xd2, 0x10, 0x3f, 0x50, 0x4a, 0xff, 0x60, 0x7b, 0xeb, 0x40, 0xb7, 0x99,
     0x58, 0x99, 0xb8, 0xa6, 0xcd, 0x3c, 0x1a, 0xbd
 };
+#endif
 
 #if MYNEWT_VAL(BLE_SM_SC_DEBUG_KEYS)
 static const uint8_t ble_sm_alg_dbg_pub_key[64] = {
@@ -690,6 +694,7 @@ void mbedtls_free_keypair(void)
 }
 #endif
 
+#if !CONFIG_BT_LE_CONTROLLER_NPL_OS_PORTING_SUPPORT
 /**
  * pub: 64 bytes
  * priv: 32 bytes
@@ -711,7 +716,7 @@ ble_sm_alg_gen_key_pair(uint8_t *pub, uint8_t *priv)
             return BLE_HS_EUNKNOWN;
         }
 #else
-        if (uECC_make_key(pk, priv, &curve_secp256r1) != TC_CRYPTO_SUCCESS) {
+        if (uECC_make_key(pk, priv, uECC_secp256r1()) != TC_CRYPTO_SUCCESS) {
             return BLE_HS_EUNKNOWN;
         }
 #endif
@@ -726,6 +731,7 @@ ble_sm_alg_gen_key_pair(uint8_t *pub, uint8_t *priv)
 
     return 0;
 }
+#endif
 
 #if MYNEWT_VAL(SELFTEST)
 /* Unit tests rely on custom RNG function not being set */

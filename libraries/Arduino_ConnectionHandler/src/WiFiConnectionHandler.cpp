@@ -35,12 +35,16 @@ static int const ESP_WIFI_CONNECTION_TIMEOUT = 3000;
    CTOR/DTOR
  ******************************************************************************/
 
+WiFiConnectionHandler::WiFiConnectionHandler()
+: ConnectionHandler(true, NetworkAdapter::WIFI) {
+}
+
 WiFiConnectionHandler::WiFiConnectionHandler(char const * ssid, char const * pass, bool const keep_alive)
 : ConnectionHandler{keep_alive, NetworkAdapter::WIFI}
-, _ssid{ssid}
-, _pass{pass}
 {
-
+  _settings.type = NetworkAdapter::WIFI;
+  strncpy(_settings.wifi.ssid, ssid, sizeof(_settings.wifi.ssid)-1);
+  strncpy(_settings.wifi.pwd, pass, sizeof(_settings.wifi.pwd)-1);
 }
 
 /******************************************************************************
@@ -92,14 +96,10 @@ NetworkConnectionState WiFiConnectionHandler::update_handleInit()
 #else
   WiFi.mode(WIFI_STA);
 #endif /* #if !defined(ARDUINO_ARCH_ESP8266) && !defined(ARDUINO_ARCH_ESP32) */
-  return NetworkConnectionState::CONNECTING;
-}
 
-NetworkConnectionState WiFiConnectionHandler::update_handleConnecting()
-{
   if (WiFi.status() != WL_CONNECTED)
   {
-    WiFi.begin(_ssid, _pass);
+    WiFi.begin(_settings.wifi.ssid, _settings.wifi.pwd);
 #if defined(ARDUINO_ARCH_ESP8266)
     /* Wait connection otherwise board won't connect */
     unsigned long start = millis();
@@ -113,21 +113,46 @@ NetworkConnectionState WiFiConnectionHandler::update_handleConnecting()
   if (WiFi.status() != NETWORK_CONNECTED)
   {
 #if !defined(__AVR__)
-    Debug.print(DBG_ERROR, F("Connection to \"%s\" failed"), _ssid);
-    Debug.print(DBG_INFO, F("Retrying in  \"%d\" milliseconds"), CHECK_INTERVAL_TABLE[static_cast<unsigned int>(NetworkConnectionState::CONNECTING)]);
+    Debug.print(DBG_ERROR, F("Connection to \"%s\" failed"), _settings.wifi.ssid);
+    Debug.print(DBG_INFO, F("Retrying in  \"%d\" milliseconds"), CHECK_INTERVAL_TABLE[static_cast<unsigned int>(NetworkConnectionState::INIT)]);
 #endif
-    return NetworkConnectionState::CONNECTING;
+    return NetworkConnectionState::INIT;
   }
   else
   {
 #if !defined(__AVR__)
-    Debug.print(DBG_INFO, F("Connected to \"%s\""), _ssid);
+    Debug.print(DBG_INFO, F("Connected to \"%s\""), _settings.wifi.ssid);
 #endif
 #if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32)
   configTime(0, 0, "time.arduino.cc", "pool.ntp.org", "time.nist.gov");
 #endif
+    return NetworkConnectionState::CONNECTING;
+  }
+}
+
+NetworkConnectionState WiFiConnectionHandler::update_handleConnecting()
+{
+  if (WiFi.status() != WL_CONNECTED){
+    return NetworkConnectionState::INIT;
+  }
+
+  if(!_check_internet_availability){
     return NetworkConnectionState::CONNECTED;
   }
+
+  #if !defined(ARDUINO_ARCH_ESP8266) && !defined(ARDUINO_ARCH_ESP32)
+  int ping_result = WiFi.ping("time.arduino.cc");
+  Debug.print(DBG_INFO, F("WiFi.ping(): %d"), ping_result);
+  if (ping_result < 0)
+  {
+    Debug.print(DBG_ERROR, F("Internet check failed"));
+    Debug.print(DBG_INFO, F("Retrying in  \"%d\" milliseconds"), CHECK_INTERVAL_TABLE[static_cast<unsigned int>(NetworkConnectionState::CONNECTING)]);
+    return NetworkConnectionState::CONNECTING;
+  }
+  #endif
+  Debug.print(DBG_INFO, F("Connected to Internet"));
+  return NetworkConnectionState::CONNECTED;
+
 }
 
 NetworkConnectionState WiFiConnectionHandler::update_handleConnected()
@@ -136,7 +161,7 @@ NetworkConnectionState WiFiConnectionHandler::update_handleConnected()
   {
 #if !defined(__AVR__)
     Debug.print(DBG_VERBOSE, F("WiFi.status(): %d"), WiFi.status());
-    Debug.print(DBG_ERROR, F("Connection to \"%s\" lost."), _ssid);
+    Debug.print(DBG_ERROR, F("Connection to \"%s\" lost."), _settings.wifi.ssid);
 #endif
     if (_keep_alive)
     {

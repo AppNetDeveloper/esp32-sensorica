@@ -46,15 +46,19 @@ __attribute__((weak)) void mkr_gsm_feed_watchdog()
 /******************************************************************************
    CTOR/DTOR
  ******************************************************************************/
+GSMConnectionHandler::GSMConnectionHandler()
+: ConnectionHandler(true, NetworkAdapter::GSM) {}
 
 GSMConnectionHandler::GSMConnectionHandler(const char * pin, const char * apn, const char * login, const char * pass, bool const keep_alive)
 : ConnectionHandler{keep_alive, NetworkAdapter::GSM}
-, _pin(pin)
-, _apn(apn)
-, _login(login)
-, _pass(pass)
 {
-
+  _settings.type = NetworkAdapter::GSM;
+  // To keep the backward compatibility, the user can call enableCheckInternetAvailability(false) for disabling the check
+  _check_internet_availability = true;
+  strncpy(_settings.gsm.pin, pin, sizeof(_settings.gsm.pin)-1);
+  strncpy(_settings.gsm.apn, apn, sizeof(_settings.gsm.apn)-1);
+  strncpy(_settings.gsm.login, login, sizeof(_settings.gsm.login)-1);
+  strncpy(_settings.gsm.pass, pass, sizeof(_settings.gsm.pass)-1);
 }
 
 /******************************************************************************
@@ -74,7 +78,7 @@ NetworkConnectionState GSMConnectionHandler::update_handleInit()
 {
   mkr_gsm_feed_watchdog();
 
-  if (_gsm.begin(_pin) != GSM_READY)
+  if (_gsm.begin(_settings.gsm.pin) != GSM_READY)
   {
     Debug.print(DBG_ERROR, F("SIM not present or wrong PIN"));
     return NetworkConnectionState::ERROR;
@@ -88,7 +92,8 @@ NetworkConnectionState GSMConnectionHandler::update_handleInit()
 
   mkr_gsm_feed_watchdog();
 
-  GSM3_NetworkStatus_t const network_status = _gprs.attachGPRS(_apn, _login, _pass, true);
+  GSM3_NetworkStatus_t const network_status = _gprs.attachGPRS(
+    _settings.gsm.apn, _settings.gsm.login, _settings.gsm.pass, true);
   Debug.print(DBG_DEBUG, F("GPRS.attachGPRS(): %d"), network_status);
   if (network_status == GSM3_NetworkStatus_t::ERROR)
   {
@@ -102,6 +107,10 @@ NetworkConnectionState GSMConnectionHandler::update_handleInit()
 
 NetworkConnectionState GSMConnectionHandler::update_handleConnecting()
 {
+  if(!_check_internet_availability){
+    return NetworkConnectionState::CONNECTED;
+  }
+
   Debug.print(DBG_INFO, F("Sending PING to outer space..."));
   int const ping_result = _gprs.ping("time.arduino.cc");
   Debug.print(DBG_INFO, F("GPRS.ping(): %d"), ping_result);
