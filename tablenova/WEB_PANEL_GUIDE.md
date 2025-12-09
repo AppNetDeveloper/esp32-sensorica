@@ -1,22 +1,37 @@
-# 🌐 Sistema de Configuración Web para ESP32 Sensor
+# 🌐 Sistema de Configuración Web para Multi-Sensor IoT Universal
 
 ## 📋 Resumen del Sistema
 
-He implementado un sistema completo de configuración web con acceso físico, modo bridge y protección contra fallos OTA. El sistema permite configurar todas las variables del dispositivo sin necesidad de reprogramar.
+He implementado un sistema completo de configuración web con acceso físico, modos bridge/hotspot y soporte para 4 tipos de sensores. El sistema permite configurar todas las variables del dispositivo sin necesidad de reprogramar.
 
 ## 🎯 Características Principales
 
-### ✅ **Modo Bridge con Botón Físico**
+### ✅ **Modo Bridge (3 segundos botón)**
 - **Botón GPIO 12**: Mantener presionado por 3 segundos para entrar en modo bridge
-- **LED GPIO 2**: Indicador visual del modo bridge (encendido cuando está activo)
-- **WiFi AP**: Crea red `Sensor-Config` con contraseña `sensor2024`
-- **IP del servidor**: `192.168.4.1` (acceso automático desde dispositivos conectados)
+- **Ethernet ACTIVO**: El dispositivo sigue operando normalmente
+- **WiFi temporal**: Solo para configuración, sin interrumpir operación
+- **LED Azul**: Encendido fijo en modo bridge
+- **WiFi AP**: Crea red `ESP32-Bridge` con contraseña `bridge123`
 
-### ⚙️ **Panel de Configuración Web**
-- **4 Pestañas**: Red, MQTT, Dispositivo, Sistema
+### 🔥 **Modo Hotspot (10 segundos botón)**
+- **Botón GPIO 12**: Mantener presionado por 10 segundos para modo hotspot
+- **Ethernet APAGADO**: Máximo ahorro de energía
+- **WiFi puro**: Solo configuración, sensor y MQTT pausados
+- **LEDs Verde+Rojo**: Parpadeando juntos
+- **WiFi AP**: Crea red `ESP32-Hotspot` con contraseña `12345678`
+
+### ⚙️ **Panel de Configuración Web Multi-pestaña**
+- **5 Pestañas**: Red, MQTT, Dispositivo, Sensor, Sistema
+- **Configuración dinámica**: Formas se adaptan según tipo de sensor
 - **Validación en tiempo real**: Campos obligatorios y formatos válidos
 - **Responsive**: Funciona en móviles y tablets
 - **Guardado automático**: Configuración persistente en flash
+
+### 🎛️ **Soporte Multi-Sensor**
+- **Selector de tipo sensor**: Ultrasonido / 1 Pulsador / 2 Pulsadores / Vibración
+- **Configuración dinámica**: Pines, topics, e inversores según sensor
+- **MQTT individual**: Topics separados para cada sensor
+- **Validación específica**: Configuración adecuada para cada tipo
 
 ### 🔐 **Protección contra Fallos OTA**
 - **Contador de boots**: Detecta reinicios fallidos
@@ -25,15 +40,23 @@ He implementado un sistema completo de configuración web con acceso físico, mo
 
 ## 🚀 **Cómo Usar el Sistema**
 
-### **1. Entrar en Modo Bridge**
+### **1. Entrar en Modo Bridge (Operación Continua)**
 ```
 1. Mantener presionado el botón (GPIO 12) por 3 segundos
-2. El LED (GPIO 2) se encenderá indicando modo bridge
-3. Conectar el móvil al WiFi "Sensor-Config" (contraseña: sensor2024)
+2. LED Azul se enciende fijo, el dispositivo sigue operando
+3. Conectar el móvil al WiFi "ESP32-Bridge" (contraseña: bridge123)
 4. Abrir el navegador y visitar: http://192.168.4.1
 ```
 
-### **2. Configurar Parámetros**
+### **2. Entrar en Modo Hotspot (Configuración Pura)**
+```
+1. Mantener presionado el botón (GPIO 12) por 10 segundos
+2. LEDs Verde+Rojo parpadean juntos, Ethernet se apaga
+3. Conectar el móvil al WiFi "ESP32-Hotspot" (contraseña: 12345678)
+4. Abrir el navegador y visitar: http://192.168.4.1
+```
+
+### **3. Configurar Parámetros**
 
 #### **🌐 Red**
 - **DHCP**: Activar/desactivar DHCP
@@ -46,7 +69,7 @@ He implementado un sistema completo de configuración web con acceso físico, mo
 - **Servidor**: IP del broker MQTT
 - **Puerto**: Puerto MQTT (ej: 1883)
 - **Autenticación**: Usuario y contraseña (opcionales)
-- **Topic**: Topic donde publicar datos del sensor
+- **Topics**: Configurables según tipo de sensor
 - **Client ID**: Identificador único para MQTT
 - **Keep Alive**: Tiempo de conexión keepalive
 
@@ -54,22 +77,30 @@ He implementado un sistema completo de configuración web con acceso físico, mo
 - **Nombre**: Nombre descriptivo del dispositivo
 - **Ubicación**: Lugar donde está instalado
 - **Intervalo Sensor**: Tiempo entre lecturas (ms)
-- **Cantidad Lecturas**: Número de lecturas para mediana
+- **Lecturas Promedio**: Número de lecturas para promedio
 - **Modo Debug**: Activar logs detallados
+
+#### **🎛️ Sensor (NUEVO)**
+- **Tipo Sensor**: Selector ultrasonido/1 pulsador/2 pulsadores/vibración
+- **Pines GPIO**: Configurables según tipo
+- **Inversión**: Para pulsadores (active low/high)
+- **Topics MQTT**: Individuales por sensor
+- **Cooldown**: Para sensor vibración
 
 #### **💾 Sistema**
 - **Versión Firmware**: Muestra versión actual
 - **MAC Address**: Dirección física del dispositivo
 - **Estado del Sistema**: Información completa del dispositivo
 - **Resetear Configuración**: Vuelve a valores por defecto
-- **Salir Modo Bridge**: Reinicia en modo normal
+- **Salir Modo Config**: Reinicia en modo normal
 
-### **3. Guardar y Salir**
+### **4. Guardar y Salir**
 ```
 1. Configurar todos los parámetros necesarios
-2. Hacer clic en "💾 Guardar Configuración"
-3. Esperar confirmación
-4. El dispositivo se reiniciará automáticamente en modo normal
+2. Seleccionar tipo de sensor y configurar sus parámetros específicos
+3. Hacer clic en "💾 Guardar Configuración"
+4. Esperar confirmación
+5. El dispositivo se reiniciará automáticamente en modo normal
 ```
 
 ## 📊 **Valores por Defecto**
@@ -85,28 +116,39 @@ He implementado un sistema completo de configuración web con acceso físico, mo
 ### **MQTT**
 - Servidor: 192.168.3.154
 - Puerto: 1883
-- Topic: sensor/distance
+- Topic: multi-sensor/iot
 - Client ID: Auto-generado
 - Keep Alive: 60 segundos
 
 ### **Dispositivo**
-- Nombre: ESP32-Sensor
-- Ubicación: Desconocida
+- Nombre: Multi-Sensor-IoT-01
+- Ubicación: Almacen_A
 - Intervalo Sensor: 50ms
-- Cantidad Lecturas: 10
+- Lecturas Promedio: 10
 - Modo Debug: Desactivado
+
+### **Sensor**
+- Tipo: Ultrasonido HC-SR04
+- Trigger: GPIO 25
+- Echo: GPIO 26
+- Pulsador 1: GPIO 13
+- Pulsador 2: GPIO 14
+- Vibración: GPIO 32
+- Inversión: No
+- Cooldown Vibración: 100ms
 
 ## 🔧 **Almacenamiento Persistente**
 
 ### **Donde se guardan los datos**
 - **Memoria flash**: Usando Preferences API
-- **Partición**: "sensor-config"
+- **Partición**: "multi-sensor-config"
 - **No se borra**: Los datos sobreviven a actualizaciones OTA
 
 ### **Variables guardadas**
 - Toda la configuración de red (DHCP, IPs, DNS)
 - Configuración completa de MQTT
 - Parámetros del dispositivo
+- Configuración de sensores (tipo, pines, inversores, topics)
 - Contadores de sistema para protección OTA
 
 ## 🛡️ **Protección contra Fallos**
@@ -131,10 +173,22 @@ Si el dispositivo no arranca correctamente:
 ### **Modo Bridge**
 ```
 === MODO BRIDGE ACTIVADO ===
-LED indicador encendido
+Ethernet activo, operación normal
+LED Azul encendido fijo
 AP IP address: 192.168.4.1
 Servidor web iniciado
-Conéctate a: Sensor-Config
+Conéctate a: ESP32-Bridge (pass: bridge123)
+Luego visita: http://192.168.4.1
+```
+
+### **Modo Hotspot**
+```
+=== MODO HOTSPOT ACTIVADO ===
+Ethernet apagado, máxima eficiencia
+LEDs Verde+Rojo parpadeando juntos
+AP IP address: 192.168.4.1
+Servidor web iniciado
+Conéctate a: ESP32-Hotspot (pass: 12345678)
 Luego visita: http://192.168.4.1
 ```
 
@@ -179,31 +233,42 @@ MQTT > Servidor: 192.168.3.154:1883
 ### **1. Primera Configuración**
 ```
 1. Conectar alimentación
-2. Mantener botón presionado 3 segundos
-3. Conectar móvil al WiFi del sensor
-4. Configurar MQTT y red
+2. Mantener botón presionado 10 segundos (modo hotspot)
+3. Conectar móvil al WiFi "ESP32-Hotspot"
+4. Configurar MQTT, red y tipo de sensor
 5. Guardar y reiniciar
 ```
 
 ### **2. Cambiar Servidor MQTT**
 ```
-1. Entrar en modo bridge
-2. Ir a pestaña MQTT
-3. Cambiar servidor y puerto
-4. Guardar configuración
-5. Dispositivo se reconectará automáticamente
+1. Mantener botón presionado 3 segundos (modo bridge)
+2. Conectar móvil al WiFi "ESP32-Bridge"
+3. Ir a pestaña MQTT
+4. Cambiar servidor y puerto
+5. Guardar configuración
+6. Dispositivo se reconectará automáticamente
 ```
 
 ### **3. Cambiar a IP Estática**
 ```
-1. Entrar en modo bridge
-2. Ir a pestaña Red
-3. Desactivar DHCP
-4. Configurar IP estática, gateway y DNS
+1. Mantener botón presionado 3 segundos (modo bridge)
+2. Conectar móvil al WiFi "ESP32-Bridge"
+3. Ir a pestaña Red
+4. Desactivar DHCP
+5. Configurar IP estática, gateway y DNS
+6. Guardar y reiniciar
+```
+
+### **4. Cambiar Tipo de Sensor**
+```
+1. Mantener botón presionado 3 segundos (modo bridge)
+2. Ir a pestaña Sensor
+3. Seleccionar nuevo tipo de sensor
+4. Configurar pines GPIO y parámetros específicos
 5. Guardar y reiniciar
 ```
 
-### **4. Recuperación tras Fallo OTA**
+### **5. Recuperación tras Fallo OTA**
 ```
 1. Si el dispositivo reinicia continuamente, entrar en modo bridge
 2. El sistema detectará boots fallidos
@@ -214,13 +279,16 @@ MQTT > Servidor: 192.168.3.154:1883
 
 ## ✨ **Ventajas del Sistema**
 
-1. **Acceso físico**: Solo se puede configurar localmente (seguro)
-2. **Sin reprogramación**: No necesita IDE o cables USB
-3. **Configuración persistente**: Sobrevive a actualizaciones
-4. **Protección automática**: Recuperación ante fallos
-5. **Intuitivo**: Interfaz web moderna y responsiva
-6. **Validación**: Previene configuraciones incorrectas
-7. **Debug completo**: Logs detallados para diagnóstico
+1. **Universal**: Soporta 4 tipos diferentes de sensores
+2. **Acceso físico**: Solo se puede configurar localmente (seguro)
+3. **Operación continua**: Modo bridge no interrumpe funcionamiento
+4. **Sin reprogramación**: No necesita IDE o cables USB
+5. **Configuración persistente**: Sobrevive a actualizaciones
+6. **Protección automática**: Recuperación ante fallos con rollback
+7. **Intuitivo**: Interfaz web moderna y responsiva
+8. **Validación**: Previene configuraciones incorrectas
+9. **Multi-modo**: Bridge y hotspot según necesidad
+10. **Debug completo**: Logs detallados para diagnóstico
 
 ## 🚨 **Consideraciones de Seguridad**
 

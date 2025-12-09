@@ -1,8 +1,8 @@
-# 🚀 Guía completa de OTA (Over-The-Air) para ESP32
+# 🚀 Guía completa de OTA (Over-The-Air) para Multi-Sensor IoT Universal
 
 ## 📋 Resumen del Sistema
 
-He implementado un sistema OTA robusto con control de versiones semántico para tu ESP32 WT32-ETH01. El sistema verifica automáticamente si hay actualizaciones disponibles y las instala de forma segura.
+He implementado un sistema OTA robusto con control de versiones semántico para el Multi-Sensor IoT Universal (ESP32 WT32-ETH01). El sistema verifica automáticamente si hay actualizaciones disponibles y las instala de forma segura con rollback automático.
 
 ## 🏗️ Arquitectura del Sistema
 
@@ -17,22 +17,24 @@ He implementado un sistema OTA robusto con control de versiones semántico para 
 
 ```
 /home/liviu/esp32-sensorica/tablenova/
-├── .pio/build/esp32dev/firmware.bin     # Binario para OTA
-├── src/sensor-medidor-mesas-corte.ino   # Código con OTA
-├── platformio.ini                      # Configuración con versión
-├── version.json.example                # Plantilla de version.json
-└── OTA_SETUP.md                       # Esta guía
+├── .pio/build/esp32dev/firmware.bin           # Binario para OTA
+├── src/medidor-altura-ultrasonido.ino         # Código principal con OTA
+├── platformio.ini                            # Configuración con versión
+├── data/config.html                          # Panel web de configuración
+├── version.json                              # Información de versiones
+├── deploy_script.sh                          # Script de despliegue OTA
+└── OTA_SETUP.md                              # Esta guía
 ```
 
 ## ⚙️ Configuración del Servidor
 
 ### 1. Archivo version.json
-Crea este archivo en tu servidor web (ej: `http://ota.boisolo.com/ultrasonido/version.json`):
+Crea este archivo en tu servidor web (ej: `http://ota.boisolo.com/multi-sensor-iot/version.json`):
 
 ```json
 {
   "version": "1.1.0",
-  "url": "http://ota.boisolo.com/ultrasonido/firmware-1.1.0.bin",
+  "url": "http://ota.boisolo.com/multi-sensor-iot/multi-sensor-iot-1.1.0.bin",
   "checksum": "sha256:a1b2c3d4e5f6...",
   "mandatory": false,
   "release_notes": "Mejora en la precisión del sensor y optimización de memoria RAM"
@@ -49,11 +51,11 @@ Crea este archivo en tu servidor web (ej: `http://ota.boisolo.com/ultrasonido/ve
 ### 2. Archivos de firmware
 Coloca los archivos `.bin` con nombres versionados:
 ```
-http://ota.boisolo.com/ultrasonido/
-├── firmware-1.0.0.bin  # Versión inicial
-├── firmware-1.1.0.bin  # Primera actualización
-├── firmware-1.2.0.bin  # Segunda actualización
-└── version.json        # Información de versiones
+http://ota.boisolo.com/multi-sensor-iot/
+├── multi-sensor-iot-1.0.0.bin  # Versión inicial
+├── multi-sensor-iot-1.1.0.bin  # Primera actualización
+├── multi-sensor-iot-1.2.0.bin  # Segunda actualización
+└── version.json                # Información de versiones
 ```
 
 ## 🔄 Flujo de Actualización
@@ -105,7 +107,9 @@ build_flags =
 2. **Compilar**: `pio run`
 3. **Copiar binario**:
    ```bash
-   scp .pio/build/esp32dev/firmware.bin user@ota.boisolo.com:/var/www/html/ota.boisolo.com/ultrasonido/firmware-1.1.0.bin
+   ./deploy_script.sh 1.1.0
+   # O manualmente:
+   scp .pio/build/esp32dev/firmware.bin user@ota.boisolo.com:/var/www/html/ota.boisolo.com/multi-sensor-iot/multi-sensor-iot-1.1.0.bin
    ```
 4. **Actualizar version.json** con nueva versión
 5. **Desplegar**: Los dispositivos se actualizarán automáticamente
@@ -114,7 +118,7 @@ build_flags =
 
 ### URLs y tiempos:
 ```cpp
-const char* ota_version_url = "http://ota.boisolo.com/ultrasonido/version.json";
+const char* ota_version_url = "http://ota.boisolo.com/multi-sensor-iot/version.json";
 const unsigned long ota_check_interval = 300000;  // 5 minutos
 const int ota_timeout = 30000;  // 30 segundos timeout
 ```
@@ -173,13 +177,20 @@ RAM:   14.4% (47,336 bytes de 327,680 bytes)
 Flash: 76.4% (1,001,693 bytes de 1,310,720 bytes)
 ```
 
+## 🎯 Mejoras Implementadas
+
+✅ **Rollback automático**: Vuelve a versión anterior si falla
+✅ **UI web**: Panel de configuración completa multi-pestaña
+✅ **Múltiples sensores**: Soporte para 4 tipos de sensores
+✅ **Modos bridge/hotspot**: Operación flexible
+✅ **LEDs indicadores**: Sistema visual multi-estado
+
 ## 🎯 Mejoras Futuras
 
-1. **Rollback automático**: Volver a versión anterior si falla
-2. **Actualizaciones parciales**: Solo descargar cambios
-3. **A/B testing**: Desplegar a subset de dispositivos
-4. **Métricas**: Reportar éxito/falla de actualizaciones
-5. **UI web**: Interfaz para gestionar actualizaciones
+1. **Actualizaciones parciales**: Solo descargar cambios
+2. **A/B testing**: Desplegar a subset de dispositivos
+3. **Métricas**: Reportar éxito/falla de actualizaciones
+4. **Dashboard central**: Monitoreo de múltiples dispositivos
 
 ## ❓ Preguntas Frecuentes
 
@@ -205,4 +216,4 @@ Para una nueva versión:
 1. Cambia el número en `platformio.ini`
 2. Ejecuta `pio run`
 3. Ejecuta el script de despliegue: `./deploy_script.sh 1.1.0`
-4. ¡Listo! Los dispositivos se actualizarán solos desde ota.boisolo.com/ultrasonido/
+4. ¡Listo! Los dispositivos se actualizarán solos desde ota.boisolo.com/multi-sensor-iot/
