@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuracion Multi-Sensor IoT</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f0f0; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; }
+        h2 { color: #555; border-bottom: 2px solid #4CAF50; padding-bottom: 5px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="number"], input[type="password"], select {
+            width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;
+        }
+        button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        button:hover { background-color: #45a049; }
+        button.danger { background-color: #f44336; }
+        button.danger:hover { background-color: #da190b; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .status.success { background-color: #dff0d8; color: #3c763d; }
+        .status.error { background-color: #f2dede; color: #a94442; }
+        .tabs { display: flex; margin-bottom: 20px; }
+        .tab { padding: 10px 20px; background-color: #e0e0e0; cursor: pointer; border: 1px solid #ccc; }
+        .tab:first-child { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+        .tab:last-child { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+        .tab.active { background-color: #4CAF50; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .checkbox-group { display: flex; align-items: center; }
+        .checkbox-group input { margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Panel de Configuracion Multi-Sensor IoT</h1>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('network')">Red</div>
+            <div class="tab" onclick="showTab('mqtt')">MQTT</div>
+            <div class="tab" onclick="showTab('device')">Dispositivo</div>
+            <div class="tab" onclick="showTab('sensor')">🎛️ Sensor</div>
+            <div class="tab" onclick="showTab('system')">Sistema</div>
+        </div>
+
+        <form action="/save" method="POST" onsubmit="return validateForm()">
+            <!-- Network Tab -->
+            <div id="network" class="tab-content active">
+                <h2>Configuracion de Red</h2>
+                <div class="form-group">
+                    <label for="dhcpEnabled">
+                        <input type="checkbox" id="dhcpEnabled" name="dhcpEnabled" checked onchange="toggleStaticIP()">
+                        Usar DHCP
+                    </label>
+                </div>
+
+                <div id="staticIPFields" style="display: none;">
+                    <div class="form-group">
+                        <label for="staticIP">IP Estatica:</label>
+                        <input type="text" id="staticIP" name="staticIP" placeholder="192.168.1.100">
+                    </div>
+                    <div class="form-group">
+                        <label for="gateway">Gateway:</label>
+                        <input type="text" id="gateway" name="gateway" placeholder="192.168.1.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="subnet">Mascara de Subred:</label>
+                        <input type="text" id="subnet" name="subnet" placeholder="255.255.255.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="dns1">DNS Primario:</label>
+                        <input type="text" id="dns1" name="dns1" placeholder="8.8.8.8">
+                    </div>
+                    <div class="form-group">
+                        <label for="dns2">DNS Secundario:</label>
+                        <input type="text" id="dns2" name="dns2" placeholder="8.8.4.4">
+                    </div>
+                </div>
+            </div>
+
+            <!-- MQTT Tab -->
+            <div id="mqtt" class="tab-content">
+                <h2>Configuracion MQTT</h2>
+                <div class="form-group">
+                    <label for="mqttServer">Servidor MQTT:</label>
+                    <input type="text" id="mqttServer" name="mqttServer" required placeholder="192.168.1.100">
+                </div>
+                <div class="form-group">
+                    <label for="mqttPort">Puerto MQTT:</label>
+                    <input type="number" id="mqttPort" name="mqttPort" value="1883" min="1" max="65535" placeholder="1883">
+                </div>
+                <div class="form-group">
+                    <label for="mqttUsername">Usuario MQTT:</label>
+                    <input type="text" id="mqttUsername" name="mqttUsername" placeholder="Opcional">
+                </div>
+                <div class="form-group">
+                    <label for="mqttPassword">Contrase&ntilde;a MQTT:</label>
+                    <input type="password" id="mqttPassword" name="mqttPassword" placeholder="Opcional">
+                </div>
+                <div class="form-group">
+                    <label for="mqttTopic">Topic MQTT:</label>
+                    <input type="text" id="mqttTopic" name="mqttTopic" required placeholder="multi-sensor/iot">
+                </div>
+                <div class="form-group">
+                    <label for="mqttClientId">Client ID MQTT:</label>
+                    <input type="text" id="mqttClientId" name="mqttClientId" placeholder="Auto-generado">
+                </div>
+                <div class="form-group">
+                    <label for="mqttKeepAlive">Keep Alive (segundos):</label>
+                    <input type="number" id="mqttKeepAlive" name="mqttKeepAlive" value="60" min="10" max="300" placeholder="60">
+                </div>
+            </div>
+
+            <!-- Device Tab -->
+            <div id="device" class="tab-content">
+                <h2>Configuracion del Dispositivo</h2>
+                <div class="form-group">
+                    <label for="deviceName">Nombre del Dispositivo:</label>
+                    <input type="text" id="deviceName" name="deviceName" required placeholder="Multi-Sensor-IoT-01">
+                </div>
+                <div class="form-group">
+                    <label for="location">Ubicacion:</label>
+                    <input type="text" id="location" name="location" placeholder="Oficina Principal">
+                </div>
+                <div class="form-group">
+                    <label for="sensorInterval">Intervalo de Medición (ms):</label>
+                    <input type="number" id="sensorInterval" name="sensorInterval" value="50" min="10" max="5000" placeholder="50">
+                </div>
+                <div class="form-group">
+                    <label for="readingsCount">Cantidad de Lecturas para Promedio:</label>
+                    <input type="number" id="readingsCount" name="readingsCount" value="10" min="3" max="50" placeholder="10">
+                </div>
+                <div class="form-group">
+                    <label for="debugMode">
+                        <input type="checkbox" id="debugMode" name="debugMode">
+                        Modo Debug
+                    </label>
+                </div>
+            </div>
+
+            <!-- Sensor Tab -->
+            <div id="sensor" class="tab-content">
+                <h2>🎛️ Configuración de Sensores</h2>
+
+                <div class="form-group">
+                    <label for="sensorType">Tipo de Sensor:</label>
+                    <select id="sensorType" name="sensorType" onchange="updateSensorFields()">
+                        <option value="0">📏 Ultrasonido HC-SR04</option>
+                        <option value="1">🔘 1 Pulsador</option>
+                        <option value="2">🔘🔘 2 Pulsadores</option>
+                        <option value="3">📳 Sensor Vibración SW-420</option>
+                    </select>
+                </div>
+
+                <!-- Configuración para Ultrasonido -->
+                <div id="ultrasonic-config" class="sensor-config">
+                    <div class="form-group">
+                        <label for="mainMqttTopic">Topic MQTT Principal:</label>
+                        <input type="text" id="mainMqttTopic" name="mainMqttTopic" placeholder="multi-sensor/iot">
+                    </div>
+                    <div class="form-group">
+                        <label for="readingsCount">Cantidad de Lecturas para Promedio:</label>
+                        <input type="number" id="readingsCount" name="readingsCount" value="10" min="3" max="50" placeholder="10">
+                    </div>
+                    <div class="status success">
+                        <strong>Configuración Pines:</strong><br>
+                        • Trigger: GPIO 25<br>
+                        • Echo: GPIO 26
+                    </div>
+                </div>
+
+                <!-- Configuración para 1 Pulsador -->
+                <div id="single-button-config" class="sensor-config" style="display:none;">
+                    <div class="form-group">
+                        <label for="button1Pin">Pin GPIO Pulsador 1:</label>
+                        <select id="button1Pin" name="button1Pin">
+                            <option value="13">GPIO 13</option>
+                            <option value="14">GPIO 14</option>
+                            <option value="25">GPIO 25</option>
+                            <option value="26">GPIO 26</option>
+                            <option value="32">GPIO 32</option>
+                            <option value="33">GPIO 33</option>
+                            <option value="34">GPIO 34</option>
+                            <option value="35">GPIO 35</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="button1Invert">
+                            <input type="checkbox" id="button1Invert" name="button1Invert">
+                            Invertir Señal (1=abierto, 0=cerrado)
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="button1Topic">Topic MQTT Pulsador 1:</label>
+                        <input type="text" id="button1Topic" name="button1Topic" placeholder="sensor/button1">
+                    </div>
+                </div>
+
+                <!-- Configuración para 2 Pulsadores -->
+                <div id="dual-buttons-config" class="sensor-config" style="display:none;">
+                    <h3>Pulsador 1:</h3>
+                    <div class="form-group">
+                        <label for="dualButton1Pin">Pin GPIO Pulsador 1:</label>
+                        <select id="dualButton1Pin" name="dualButton1Pin">
+                            <option value="13">GPIO 13</option>
+                            <option value="14">GPIO 14</option>
+                            <option value="25">GPIO 25</option>
+                            <option value="26">GPIO 26</option>
+                            <option value="32">GPIO 32</option>
+                            <option value="33">GPIO 33</option>
+                            <option value="34">GPIO 34</option>
+                            <option value="35">GPIO 35</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="dualButton1Invert">
+                            <input type="checkbox" id="dualButton1Invert" name="dualButton1Invert">
+                            Invertir Señal Pulsador 1
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="dualButton1Topic">Topic MQTT Pulsador 1:</label>
+                        <input type="text" id="dualButton1Topic" name="dualButton1Topic" placeholder="sensor/button1">
+                    </div>
+
+                    <h3>Pulsador 2:</h3>
+                    <div class="form-group">
+                        <label for="button2Pin">Pin GPIO Pulsador 2:</label>
+                        <select id="button2Pin" name="button2Pin">
+                            <option value="13">GPIO 13</option>
+                            <option value="14">GPIO 14</option>
+                            <option value="25">GPIO 25</option>
+                            <option value="26">GPIO 26</option>
+                            <option value="32">GPIO 32</option>
+                            <option value="33">GPIO 33</option>
+                            <option value="34">GPIO 34</option>
+                            <option value="35">GPIO 35</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="button2Invert">
+                            <input type="checkbox" id="button2Invert" name="button2Invert">
+                            Invertir Señal Pulsador 2
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="button2Topic">Topic MQTT Pulsador 2:</label>
+                        <input type="text" id="button2Topic" name="button2Topic" placeholder="sensor/button2">
+                    </div>
+                </div>
+
+                <!-- Configuración para Sensor Vibración -->
+                <div id="vibration-config" class="sensor-config" style="display:none;">
+                    <div class="form-group">
+                        <label for="vibrationPin">Pin GPIO Sensor Vibración:</label>
+                        <select id="vibrationPin" name="vibrationPin">
+                            <option value="32" selected>GPIO 32 (Recomendado)</option>
+                            <option value="13">GPIO 13</option>
+                            <option value="14">GPIO 14</option>
+                            <option value="25">GPIO 25</option>
+                            <option value="26">GPIO 26</option>
+                            <option value="33">GPIO 33</option>
+                            <option value="34">GPIO 34</option>
+                            <option value="35">GPIO 35</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="vibrationThreshold">Cooldown entre Detecciones (ms):</label>
+                        <input type="number" id="vibrationThreshold" name="vibrationThreshold" value="100" min="50" max="5000" placeholder="100">
+                        <small>Tiempo mínimo entre detecciones para evitar spam</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="vibrationTopic">Topic MQTT Vibración:</label>
+                        <input type="text" id="vibrationTopic" name="vibrationTopic" placeholder="sensor/vibration">
+                    </div>
+                    <div class="status success">
+                        <strong>Información Sensor SW-420:</strong><br>
+                        • LOW = Vibración detectada<br>
+                        • HIGH = Sin vibración<br>
+                        • Sensibilidad ajustable vía potenciómetro
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Tab -->
+            <div id="system" class="tab-content">
+                <h2>Sistema</h2>
+                <div class="status success">
+                    <strong>Firmware Version:</strong> <span id="firmwareVersion">1.0.0</span><br>
+                    <strong>MAC Address:</strong> <span id="macAddress">Calculando...</span><br>
+                    <strong>Uptime:</strong> <span id="uptime">Calculando...</span>
+                </div>
+
+                <button type="button" onclick="window.location.href='/status'">Ver Estado</button>
+                <button type="button" class="danger" onclick="if(confirm('¿Estas seguro de que quieres resetear toda la configuracion?')) { window.location.href='/reset'; }">Resetear Configuracion</button>
+                <button type="button" class="danger" onclick="if(confirm('¿Estas seguro de que quieres salir del modo bridge?')) { window.location.href='/exit'; }">Salir Modo Bridge</button>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <button type="submit">💾 Guardar Configuracion</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Tab functionality
+        function showTab(tabName) {
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.classList.remove('active'));
+
+            const tabButtons = document.querySelectorAll('.tab');
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Update sensor configuration fields based on sensor type
+        function updateSensorFields() {
+            const sensorType = document.getElementById('sensorType').value;
+
+            // Hide all sensor configurations
+            document.getElementById('ultrasonic-config').style.display = 'none';
+            document.getElementById('single-button-config').style.display = 'none';
+            document.getElementById('dual-buttons-config').style.display = 'none';
+            document.getElementById('vibration-config').style.display = 'none';
+
+            // Show relevant configuration
+            switch(sensorType) {
+                case '0': // Ultrasonido
+                    document.getElementById('ultrasonic-config').style.display = 'block';
+                    break;
+                case '1': // 1 Pulsador
+                    document.getElementById('single-button-config').style.display = 'block';
+                    break;
+                case '2': // 2 Pulsadores
+                    document.getElementById('dual-buttons-config').style.display = 'block';
+                    break;
+                case '3': // Sensor Vibración
+                    document.getElementById('vibration-config').style.display = 'block';
+                    break;
+            }
+        }
+
+        // Form validation
+        function validateForm() {
+            const requiredFields = ['mqttServer', 'deviceName'];
+            for (let field of requiredFields) {
+                const element = document.getElementById(field);
+                if (!element.value.trim()) {
+                    alert('Por favor completa el campo: ' + element.previousElementSibling.textContent);
+                    element.focus();
+                    return false;
+                }
+            }
+
+            const dhcpEnabled = document.getElementById('dhcpEnabled').checked;
+            if (!dhcpEnabled) {
+                const ipFields = ['staticIP', 'gateway', 'subnet'];
+                for (let field of ipFields) {
+                    const element = document.getElementById(field);
+                    if (!element.value.trim()) {
+                        alert('Por favor completa el campo: ' + element.previousElementSibling.textContent);
+                        element.focus();
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        // Toggle static IP fields
+        function toggleStaticIP() {
+            const dhcpEnabled = document.getElementById('dhcpEnabled').checked;
+            const staticFields = document.getElementById('staticIPFields');
+            staticFields.style.display = dhcpEnabled ? 'none' : 'block';
+        }
+
+        // Load device configuration from server
+        async function loadDeviceConfig() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                // Load sensor configuration
+                if (data.sensorType !== undefined) {
+                    document.getElementById('sensorType').value = data.sensorType;
+                    updateSensorFields();
+                }
+
+                // Load sensor-specific settings
+                if (data.button1Pin !== undefined) {
+                    document.getElementById('button1Pin').value = data.button1Pin;
+                    document.getElementById('dualButton1Pin').value = data.button1Pin;
+                }
+                if (data.button2Pin !== undefined) {
+                    document.getElementById('button2Pin').value = data.button2Pin;
+                }
+                if (data.vibrationPin !== undefined) {
+                    document.getElementById('vibrationPin').value = data.vibrationPin;
+                }
+
+                // Load MQTT topics
+                if (data.button1Topic) {
+                    document.getElementById('button1Topic').value = data.button1Topic;
+                    document.getElementById('dualButton1Topic').value = data.button1Topic;
+                }
+                if (data.button2Topic) {
+                    document.getElementById('button2Topic').value = data.button2Topic;
+                }
+                if (data.vibrationTopic) {
+                    document.getElementById('vibrationTopic').value = data.vibrationTopic;
+                }
+                if (data.mainMqttTopic) {
+                    document.getElementById('mainMqttTopic').value = data.mainMqttTopic;
+                }
+
+                // Load sensor settings
+                if (data.vibrationThreshold !== undefined) {
+                    document.getElementById('vibrationThreshold').value = data.vibrationThreshold;
+                }
+
+                // Load checkboxes
+                if (data.button1Invert !== undefined) {
+                    document.getElementById('button1Invert').checked = data.button1Invert;
+                    document.getElementById('dualButton1Invert').checked = data.button1Invert;
+                }
+                if (data.button2Invert !== undefined) {
+                    document.getElementById('button2Invert').checked = data.button2Invert;
+                }
+
+                // Load basic device settings
+                if (data.deviceName) {
+                    document.getElementById('deviceName').value = data.deviceName;
+                }
+                if (data.location) {
+                    document.getElementById('location').value = data.location;
+                }
+                if (data.sensorInterval) {
+                    document.getElementById('sensorInterval').value = data.sensorInterval;
+                }
+                if (data.readingsCount) {
+                    document.getElementById('readingsCount').value = data.readingsCount;
+                }
+                if (data.debugMode !== undefined) {
+                    document.getElementById('debugMode').checked = data.debugMode;
+                }
+
+            } catch (error) {
+                console.log('Error loading device config:', error);
+                // Initialize with ultrasonic as default
+                updateSensorFields();
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleStaticIP();
+            loadDeviceConfig();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "url": "http://ota.boisolo.com/ultrasonido/medidor-altura-ultrasonido-1.0.0.bin",
+  "checksum": "sha256:a1b2c3d4e5f6...",
+  "mandatory": false,
+  "release_notes": "Versión inicial del medidor de altura con sensor ultrasónico y configuración web"
+}
