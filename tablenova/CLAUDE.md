@@ -1,9 +1,9 @@
-# CLAUDE.md
+# CLAUDE.md - Project Development Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides essential guidance for Claude Code when working with the Multi-Sensor IoT Universal project.
 
 ## Project Overview
-Multi-Sensor IoT Universal - Professional ESP32 firmware supporting 4 sensor types with web configuration and OTA updates.
+Multi-Sensor IoT Universal - Professional ESP32 firmware supporting 4 sensor types with dual Ethernet/WiFi connectivity, web configuration, and OTA updates.
 
 ## Build and Development Commands
 
@@ -28,7 +28,7 @@ pio device monitor
 ### OTA Deployment
 ```bash
 # Deploy new version to OTA server
-./deploy_script.sh 1.1.0
+./deploy_script_ftp.sh 1.1.0
 
 # This script:
 # 1. Copies .pio/build/esp32dev/firmware.bin to versioned file
@@ -51,15 +51,21 @@ pio device monitor
 
 ### Operating Modes
 1. **Normal Mode**: Continuous sensor operation with MQTT publishing
-2. **Bridge Mode** (2s button press): Ethernet maintained + WiFi AP for config
-3. **Hotspot Mode** (5s button press): WiFi-only configuration mode
+2. **Bridge Mode** (3s button press): Ethernet maintained + WiFi AP for config
+3. **Hotspot Mode** (10s button press): WiFi-only configuration mode
+4. **Auto-Hotspot**: Automatic hotspot if no previous configuration exists
+
+### Connection Modes
+- **MODE_ETHERNET**: Ethernet only
+- **MODE_WIFI**: WiFi only
+- **MODE_DUAL_ETH_WIFI**: Ethernet primary + WiFi backup
 
 ### Key Architectural Components
 
 #### Configuration System
-- **Persistent Storage**: ESP32 Preferences API for non-volatile config
+- **Persistent Storage**: ESP32 Preferences API (survives OTA updates)
 - **Web Panel**: HTML file served from LittleFS (`/data/config.html`)
-- **Multi-tab Interface**: Network, MQTT, Device, System configuration
+- **Multi-tab Interface**: Network, WiFi, Connection, MQTT, Device, Sensor, System
 - **Real-time Validation**: Client-side and server-side input validation
 
 #### OTA Update System
@@ -91,6 +97,13 @@ struct NetworkConfig {
   String staticIP, gateway, subnet, dns1, dns2;
 };
 
+struct WiFiConfig {
+  String ssid, password;
+  bool enabled;
+  int channel;
+  bool hidden;
+};
+
 struct MQTTConfig {
   String server, username, password, topic, clientId;
   int port, keepAlive;
@@ -100,6 +113,9 @@ struct DeviceConfig {
   String deviceName, location;
   int sensorInterval, readingsCount;
   bool debugMode;
+  int sensorType; // 0=ultrasonido, 1=1 botón, 2=2 botones, 3=vibración
+  int connectionMode; // 0=Ethernet, 1=WiFi, 2=Dual
+  // ... additional sensor-specific configs
 };
 ```
 
@@ -121,18 +137,19 @@ struct SystemStatus {
 - **Security**: Access only via physical button press (bridge/hotspot modes)
 
 ### MQTT Integration
-- **Topic Structure**: Configurable, default `medidor/altura`
-- **Payload Format**: JSON with distance, device info, and timestamp
+- **Topic Structure**: Configurable, default `multi-sensor/iot/`
+- **Payload Format**: JSON with device info, sensor type, timestamp
 - **Connection Management**: Automatic reconnection with exponential backoff
 - **QoS Level**: Configurable, default QoS 1
 
 ## File Structure Context
 
 ### Critical Files
-- `src/medidor-altura-ultrasonido.ino`: Main firmware (Multi-Sensor IoT)
-- `data/config.html`: Web configuration panel
+- `src/multi-sensor-iot.ino`: Main firmware (renamed from medidor-altura-ultrasonido.ino)
+- `data/config.html`: Web configuration panel with 7 tabs
 - `version.json`: OTA update information
 - `platformio.ini`: Build configuration with WT32-ETH01 pin mappings
+- `README.md`: Comprehensive documentation (consolidated from all .md files)
 
 ### Build Configuration
 - **Filesystem**: LittleFS for web content storage
@@ -157,15 +174,91 @@ struct SystemStatus {
 - Configuration validation prevents invalid network/MQTT settings
 
 ## GPIO Pin Assignments (WT32-ETH01)
-- GPIO 25: Ultrasonic Trigger
-- GPIO 26: Ultrasonic Echo
-- GPIO 12: Configuration Button (pull-up)
-- GPIO 2: Configuration LED (blue)
-- GPIO 4: Status LED (green)
-- GPIO 5: Error LED (red)
+```
+GPIO 25: Ultrasonic Trigger / Pulsador 1
+GPIO 26: Ultrasonic Echo / Pulsador 2
+GPIO 12: Configuration Button (pull-up)
+GPIO 2: Configuration LED (blue)
+GPIO 4: Status LED (green)
+GPIO 5: Error LED (red)
+GPIO 13: Pulsador 1 (alternativo)
+GPIO 14: Pulsador 2 (alternativo)
+GPIO 32: Sensor de vibraciones SW-420
+```
 
 ## OTA Server Configuration
 - **Server**: ota.boisolo.com/multi-sensor-iot/
 - **Version File**: `version.json` with firmware metadata
 - **Firmware Path**: `/multi-sensor-iot/multi-sensor-iot-{version}.bin`
 - **Update Frequency**: Every 5 minutes (300,000ms)
+
+## Key Features Implementation
+
+### Auto-Hotspot Mode
+- Detects when no WiFi or MQTT configuration exists
+- Automatically enters hotspot mode for first-time setup
+- Creates "ESP32-Hotspot" AP with captive portal
+
+### Connection Mode Management
+- Real-time connection monitoring every 10 seconds
+- Automatic failover in dual mode
+- Web interface allows mode switching without reboot
+
+### Persistent Configuration
+- Uses ESP32 Preferences API with namespace "sensor-config"
+- All settings survive OTA updates
+- Auto-backup on configuration changes
+
+### Multi-Sensor Support
+- 4 sensor types supported via enum
+- Dynamic pin configuration based on sensor type
+- Sensor-specific MQTT topics and payload formats
+
+## Testing and Deployment
+
+### Local Testing
+```bash
+# Build and test locally
+pio run
+pio device monitor
+
+# Test web interface
+# Enter bridge mode (3s button press)
+# Connect to ESP32-Bridge WiFi
+# Access http://192.168.4.1
+```
+
+### OTA Deployment Testing
+```bash
+# Deploy to test server
+./deploy_script_ftp.sh test-version
+
+# Verify HTTP access
+curl -I http://ota.boisolo.com/multi-sensor-iot/version.json
+curl -I http://ota.boisolo.com/multi-sensor-iot/multi-sensor-iot-test-version.bin
+```
+
+### Production Deployment
+```bash
+# Deploy production version
+./deploy_script_ftp.sh 1.1.0
+
+# Monitor OTA logs on devices
+# Check for automatic updates within 5 minutes
+```
+
+## Important Notes
+
+- **Bluetooth Removed**: Eliminated to optimize flash space (firmware now 79.9% of flash)
+- **Auto-Hotspot**: New feature for zero-configuration setup
+- **Connection Modes**: Three modes (Ethernet, WiFi, Dual) with web control
+- **Documentation Consolidated**: All .md files merged into comprehensive README.md
+- **Firmware Renamed**: Changed from medidor-altura-ultrasonido.ino to multi-sensor-iot.ino
+
+## Current Status
+- ✅ Compilation successful (1.04MB of 1.31MB flash)
+- ✅ WiFi + Ethernet control implemented
+- ✅ Web interface updated with connection modes
+- ✅ Auto-hotspot mode implemented
+- ✅ Persistent configuration across OTA
+- ✅ File renamed and documentation consolidated

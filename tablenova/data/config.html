@@ -5,31 +5,184 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Configuracion Multi-Sensor IoT</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f0f0; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #333; text-align: center; }
-        h2 { color: #555; border-bottom: 2px solid #4CAF50; padding-bottom: 5px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="text"], input[type="number"], input[type="password"], select {
-            width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background-color: #f5f5f5;
+            font-size: 16px;
+            line-height: 1.5;
         }
-        button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            font-size: 1.5em;
+            margin: 0 0 15px 0;
+        }
+        h2 {
+            color: #555;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+            font-size: 1.2em;
+            margin: 15px 0 10px 0;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        input[type="text"], input[type="number"], input[type="password"], select {
+            width: 100%;
+            padding: 12px 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 8px 4px;
+            font-size: 16px;
+            font-weight: 600;
+            min-height: 48px;
+            touch-action: manipulation;
+        }
         button:hover { background-color: #45a049; }
+        button:active { transform: translateY(1px); }
         button.danger { background-color: #f44336; }
         button.danger:hover { background-color: #da190b; }
-        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .status {
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
         .status.success { background-color: #dff0d8; color: #3c763d; }
         .status.error { background-color: #f2dede; color: #a94442; }
-        .tabs { display: flex; margin-bottom: 20px; }
-        .tab { padding: 10px 20px; background-color: #e0e0e0; cursor: pointer; border: 1px solid #ccc; }
-        .tab:first-child { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
-        .tab:last-child { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
-        .tab.active { background-color: #4CAF50; color: white; }
+
+        /* Pestañas móviles optimizadas */
+        .tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .tab {
+            flex: 1;
+            min-width: 100px;
+            padding: 12px 8px;
+            background-color: #e0e0e0;
+            cursor: pointer;
+            border: none;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .tab:first-child { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+        .tab:last-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .tab.active {
+            background-color: #4CAF50;
+            color: white;
+        }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .checkbox-group { display: flex; align-items: center; }
-        .checkbox-group input { margin-right: 10px; }
+
+        /* Checkbox y radio optimizados para móvil */
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+        }
+        .checkbox-group input {
+            margin-right: 12px;
+            min-width: 20px;
+            min-height: 20px;
+        }
+        .checkbox-group span {
+            font-size: 16px;
+            user-select: none;
+        }
+
+        /* Media queries para diferentes tamaños */
+        @media (max-width: 600px) {
+            body { padding: 5px; font-size: 16px; }
+            .container { padding: 12px; border-radius: 8px; }
+            h1 { font-size: 1.3em; }
+            h2 { font-size: 1.1em; }
+            .tabs { flex-direction: row; flex-wrap: wrap; }
+            .tab { font-size: 11px; padding: 10px 6px; }
+            button {
+                width: calc(50% - 8px);
+                margin: 4px 0;
+                padding: 16px;
+                font-size: 16px;
+            }
+            button.full-width { width: 100%; }
+            input[type="text"], input[type="number"], input[type="password"], select {
+                padding: 16px 12px;
+                font-size: 16px; /* Previene zoom en iOS */
+            }
+        }
+
+        @media (max-width: 400px) {
+            .tab { font-size: 10px; padding: 8px 4px; }
+            h1 { font-size: 1.2em; }
+            .container { padding: 10px; }
+        }
+
+        /* Botón grande principal */
+        .save-button {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            width: 100%;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+        }
+
+        /* Mejora para inputs inválidos */
+        input:invalid, input.error {
+            border-color: #f44336;
+            background-color: #fff5f5;
+        }
+
+        /* Scrollbar personalizada */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -38,6 +191,8 @@
 
         <div class="tabs">
             <div class="tab active" onclick="showTab('network')">Red</div>
+            <div class="tab" onclick="showTab('wifi')">📶 WiFi</div>
+            <div class="tab" onclick="showTab('connection')">🔗 Conexión</div>
             <div class="tab" onclick="showTab('mqtt')">MQTT</div>
             <div class="tab" onclick="showTab('device')">Dispositivo</div>
             <div class="tab" onclick="showTab('sensor')">🎛️ Sensor</div>
@@ -76,6 +231,44 @@
                         <label for="dns2">DNS Secundario:</label>
                         <input type="text" id="dns2" name="dns2" placeholder="8.8.4.4">
                     </div>
+                </div>
+            </div>
+
+            <!-- WiFi Tab -->
+            <div id="wifi" class="tab-content">
+                <h2>Configuracion WiFi</h2>
+                <div class="form-group">
+                    <label for="wifiEnabled">Habilitar WiFi:</label>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="wifiEnabled" name="wifiEnabled">
+                        <span>Activar conexion WiFi como backup</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="wifiSSID">SSID WiFi:</label>
+                    <input type="text" id="wifiSSID" name="wifiSSID" placeholder="Nombre de la red WiFi">
+                </div>
+                <div class="form-group">
+                    <label for="wifiPassword">Contraseña WiFi:</label>
+                    <input type="password" id="wifiPassword" name="wifiPassword" placeholder="Contraseña de la red WiFi">
+                </div>
+            </div>
+
+            <!-- Connection Tab -->
+            <div id="connection" class="tab-content">
+                <h2>Modo de Conexion</h2>
+                <div class="form-group">
+                    <label for="connectionMode">Modo de conexion principal:</label>
+                    <select id="connectionMode" name="connectionMode">
+                        <option value="0">Ethernet (prioritario)</option>
+                        <option value="1">WiFi (unicamente)</option>
+                        <option value="2">Dual: Ethernet + WiFi backup</option>
+                    </select>
+                    <p><small>
+                        • <strong>Ethernet:</strong> Conexion cableada prioritaria<br>
+                        • <strong>WiFi:</strong> Conexion inalambrica unicamente<br>
+                        • <strong>Dual:</strong> Ethernet como primario, WiFi como respaldo
+                    </small></p>
                 </div>
             </div>
 
@@ -158,10 +351,6 @@
                     <div class="form-group">
                         <label for="mainMqttTopic">Topic MQTT Principal:</label>
                         <input type="text" id="mainMqttTopic" name="mainMqttTopic" placeholder="multi-sensor/iot">
-                    </div>
-                    <div class="form-group">
-                        <label for="readingsCount">Cantidad de Lecturas para Promedio:</label>
-                        <input type="number" id="readingsCount" name="readingsCount" value="10" min="3" max="50" placeholder="10">
                     </div>
                     <div class="status success">
                         <strong>Configuración Pines:</strong><br>
@@ -297,8 +486,8 @@
                 <button type="button" class="danger" onclick="if(confirm('¿Estas seguro de que quieres salir del modo bridge?')) { window.location.href='/exit'; }">Salir Modo Bridge</button>
             </div>
 
-            <div style="text-align: center; margin-top: 20px;">
-                <button type="submit">💾 Guardar Configuracion</button>
+            <div style="text-align: center; margin-top: 25px;">
+                <button type="submit" class="save-button full-width">💾 Guardar Configuracion</button>
             </div>
         </form>
     </div>
@@ -345,30 +534,98 @@
 
         // Form validation
         function validateForm() {
+            // Validar campos requeridos básicos
             const requiredFields = ['mqttServer', 'deviceName'];
             for (let field of requiredFields) {
                 const element = document.getElementById(field);
                 if (!element.value.trim()) {
-                    alert('Por favor completa el campo: ' + element.previousElementSibling.textContent);
+                    alert('❌ Campo requerido faltante: ' + element.previousElementSibling.textContent);
                     element.focus();
+                    element.style.borderColor = 'red';
                     return false;
+                } else {
+                    element.style.borderColor = '';
                 }
             }
 
+            // Validar MQTT Port
+            const mqttPort = document.getElementById('mqttPort');
+            if (mqttPort.value && (mqttPort.value < 1 || mqttPort.value > 65535)) {
+                alert('❌ El puerto MQTT debe estar entre 1 y 65535');
+                mqttPort.focus();
+                mqttPort.style.borderColor = 'red';
+                return false;
+            } else {
+                mqttPort.style.borderColor = '';
+            }
+
+            // Validar servidor MQTT (no localhost)
+            const mqttServer = document.getElementById('mqttServer').value.trim();
+            if (mqttServer === 'localhost' || mqttServer === '127.0.0.1') {
+                alert('❌ El servidor MQTT no puede ser localhost o 127.0.0.1');
+                document.getElementById('mqttServer').focus();
+                document.getElementById('mqttServer').style.borderColor = 'red';
+                return false;
+            }
+
+            // Validar configuración de red si DHCP está desactivado
             const dhcpEnabled = document.getElementById('dhcpEnabled').checked;
             if (!dhcpEnabled) {
                 const ipFields = ['staticIP', 'gateway', 'subnet'];
                 for (let field of ipFields) {
                     const element = document.getElementById(field);
                     if (!element.value.trim()) {
-                        alert('Por favor completa el campo: ' + element.previousElementSibling.textContent);
+                        alert('❌ Campo requerido para IP estática: ' + element.previousElementSibling.textContent);
                         element.focus();
+                        element.style.borderColor = 'red';
                         return false;
+                    } else {
+                        element.style.borderColor = '';
                     }
+                }
+
+                // Validar formato de IP
+                const staticIP = document.getElementById('staticIP').value.trim();
+                const gateway = document.getElementById('gateway').value.trim();
+                const subnet = document.getElementById('subnet').value.trim();
+
+                if (!validateIP(staticIP)) {
+                    alert('❌ La IP estática no tiene un formato válido');
+                    document.getElementById('staticIP').focus();
+                    document.getElementById('staticIP').style.borderColor = 'red';
+                    return false;
+                }
+                if (!validateIP(gateway)) {
+                    alert('❌ El gateway no tiene un formato válido');
+                    document.getElementById('gateway').focus();
+                    document.getElementById('gateway').style.borderColor = 'red';
+                    return false;
+                }
+                if (!validateIP(subnet)) {
+                    alert('❌ La máscara de subred no tiene un formato válido');
+                    document.getElementById('subnet').focus();
+                    document.getElementById('subnet').style.borderColor = 'red';
+                    return false;
                 }
             }
 
-            return true;
+            // Validar que no haya caracteres inválidos en nombres
+            const deviceName = document.getElementById('deviceName').value.trim();
+            if (deviceName.length < 3) {
+                alert('❌ El nombre del dispositivo debe tener al menos 3 caracteres');
+                document.getElementById('deviceName').focus();
+                document.getElementById('deviceName').style.borderColor = 'red';
+                return false;
+            }
+
+            // Confirmar antes de guardar
+            return confirm('✅ ¿Estás seguro de guardar esta configuración? El dispositivo se reiniciará automáticamente.');
+        }
+
+        // Función para validar formato de IP
+        function validateIP(ip) {
+            const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+            return ipRegex.test(ip);
         }
 
         // Toggle static IP fields
@@ -383,6 +640,38 @@
             try {
                 const response = await fetch('/api/status');
                 const data = await response.json();
+
+                // Load network configuration
+                if (data.dhcpEnabled !== undefined) {
+                    document.getElementById('dhcpEnabled').checked = data.dhcpEnabled;
+                    toggleStaticIP();
+                }
+                if (data.staticIP) document.getElementById('staticIP').value = data.staticIP;
+                if (data.gateway) document.getElementById('gateway').value = data.gateway;
+                if (data.subnet) document.getElementById('subnet').value = data.subnet;
+                if (data.dns1) document.getElementById('dns1').value = data.dns1;
+                if (data.dns2) document.getElementById('dns2').value = data.dns2;
+
+                // Load WiFi configuration
+                if (data.wifiEnabled !== undefined) {
+                    document.getElementById('wifiEnabled').checked = data.wifiEnabled;
+                }
+                if (data.wifiSSID) document.getElementById('wifiSSID').value = data.wifiSSID;
+                if (data.wifiPassword) document.getElementById('wifiPassword').value = data.wifiPassword;
+
+                // Load connection mode
+                if (data.connectionMode !== undefined) {
+                    document.getElementById('connectionMode').value = data.connectionMode;
+                }
+
+                // Load MQTT configuration
+                if (data.mqttServer) document.getElementById('mqttServer').value = data.mqttServer;
+                if (data.mqttPort) document.getElementById('mqttPort').value = data.mqttPort;
+                if (data.mqttUsername) document.getElementById('mqttUsername').value = data.mqttUsername;
+                if (data.mqttPassword) document.getElementById('mqttPassword').value = data.mqttPassword;
+                if (data.mqttTopic) document.getElementById('mqttTopic').value = data.mqttTopic;
+                if (data.mqttClientId) document.getElementById('mqttClientId').value = data.mqttClientId;
+                if (data.mqttKeepAlive) document.getElementById('mqttKeepAlive').value = data.mqttKeepAlive;
 
                 // Load sensor configuration
                 if (data.sensorType !== undefined) {
@@ -402,7 +691,14 @@
                     document.getElementById('vibrationPin').value = data.vibrationPin;
                 }
 
-                // Load MQTT topics
+                // Load MQTT topics (use mainMqttTopic for both, or mqttTopic as fallback)
+                if (data.mainMqttTopic) {
+                    document.getElementById('mainMqttTopic').value = data.mainMqttTopic;
+                    // Also update the main MQTT topic if it's not set
+                    if (!data.mqttTopic || data.mqttTopic === "sensor/distance") {
+                        document.getElementById('mqttTopic').value = data.mainMqttTopic;
+                    }
+                }
                 if (data.button1Topic) {
                     document.getElementById('button1Topic').value = data.button1Topic;
                     document.getElementById('dualButton1Topic').value = data.button1Topic;
@@ -412,9 +708,6 @@
                 }
                 if (data.vibrationTopic) {
                     document.getElementById('vibrationTopic').value = data.vibrationTopic;
-                }
-                if (data.mainMqttTopic) {
-                    document.getElementById('mainMqttTopic').value = data.mainMqttTopic;
                 }
 
                 // Load sensor settings
@@ -443,9 +736,24 @@
                 }
                 if (data.readingsCount) {
                     document.getElementById('readingsCount').value = data.readingsCount;
+                    // Also update the ultrasonic readings count
+                    const ultrasonicReadingsCount = document.getElementById('ultrasonic-config').querySelector('#readingsCount');
+                    if (ultrasonicReadingsCount) {
+                        ultrasonicReadingsCount.value = data.readingsCount;
+                    }
                 }
                 if (data.debugMode !== undefined) {
                     document.getElementById('debugMode').checked = data.debugMode;
+                }
+
+                // Load firmware version
+                if (data.version) {
+                    document.getElementById('firmwareVersion').textContent = data.version;
+                }
+                if (data.version) {
+                    // Update all firmware version references
+                    const versionElements = document.querySelectorAll('#firmwareVersion');
+                    versionElements.forEach(el => el.textContent = data.version);
                 }
 
             } catch (error) {
@@ -459,7 +767,64 @@
         document.addEventListener('DOMContentLoaded', function() {
             toggleStaticIP();
             loadDeviceConfig();
+
+            // Añadir validación en tiempo real
+            addRealtimeValidation();
         });
+
+        // Función para añadir validación en tiempo real
+        function addRealtimeValidation() {
+            // Validar campos requeridos en tiempo real
+            const requiredFields = ['mqttServer', 'deviceName'];
+            requiredFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                field.addEventListener('input', function() {
+                    if (this.value.trim()) {
+                        this.style.borderColor = '#28a745'; // Verde si tiene contenido
+                    } else {
+                        this.style.borderColor = '#dc3545'; // Rojo si está vacío
+                    }
+                });
+
+                field.addEventListener('blur', function() {
+                    if (!this.value.trim()) {
+                        this.style.borderColor = '#dc3545';
+                    }
+                });
+            });
+
+            // Validar puerto MQTT
+            document.getElementById('mqttPort').addEventListener('input', function() {
+                const port = parseInt(this.value);
+                if (port >= 1 && port <= 65535) {
+                    this.style.borderColor = '#28a745';
+                } else {
+                    this.style.borderColor = '#dc3545';
+                }
+            });
+
+            // Validar campos de IP estática
+            const ipFields = ['staticIP', 'gateway', 'subnet'];
+            ipFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                field.addEventListener('input', function() {
+                    if (validateIP(this.value.trim())) {
+                        this.style.borderColor = '#28a745';
+                    } else {
+                        this.style.borderColor = '#dc3545';
+                    }
+                });
+            });
+
+            // Validar nombre del dispositivo
+            document.getElementById('deviceName').addEventListener('input', function() {
+                if (this.value.trim().length >= 3) {
+                    this.style.borderColor = '#28a745';
+                } else {
+                    this.style.borderColor = '#dc3545';
+                }
+            });
+        }
     </script>
 </body>
 </html>

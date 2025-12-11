@@ -14,14 +14,17 @@
 #include <esp_timer.h>
 #include <Preferences.h>
 
-// -- INICIO: SECCIÓN DE CONFIGURACIÓN MULTI-SENSOR --
-
-// TIPOS DE SENSORES SOPORTADOS
 enum SensorType {
   SENSOR_ULTRASONIC = 0,    // HC-SR04 - Distancia
   SENSOR_SINGLE_BUTTON = 1, // 1 Pulsador digital
   SENSOR_DUAL_BUTTONS = 2,  // 2 Pulsadores digitales
   SENSOR_VIBRATION = 3      // Sensor de vibraciones SW-420
+};
+
+enum ConnectionMode {
+  MODE_ETHERNET = 0,   // Ethernet
+  MODE_WIFI = 1,       // WiFi
+  MODE_DUAL_ETH_WIFI = 2  // Ethernet primario + WiFi backup
 };
 
 // -- PINES PARA SENSORES (CONFIGURABLES) --
@@ -62,19 +65,11 @@ const unsigned long hotspotButtonHoldTime = 10000;  // 10 segundos para modo hot
 #define ETH_PHY_MDIO   18
 #define ETH_CLK_MODE   ETH_CLOCK_GPIO0_IN // El modo de reloj para la WT32-ETH01 es entrada en GPIO 0
 
-// Variable para saber si estamos conectados a la red
 static bool eth_connected = false;
 
-// -- FIN: SECCIÓN DE CONFIGURACIÓN ETHERNET --
-
-
-// Configuración de MQTT - Ahora usa configuración dinámica
-
-// La librería PubSubClient necesita una instancia de WiFiClient (que es compatible con ETH).
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// El resto de tus variables globales permanece igual
 const int NUM_READINGS = 10;
 volatile int readings[NUM_READINGS];
 volatile int readingIndex = 0;
@@ -90,15 +85,12 @@ unsigned long lastSensorRestart = 0;
 const unsigned long sensorRestartInterval = 1800000;
 
 // -- Configuración OTA --
-const char* ota_version_url = "http://ota.boisolo.com/ultrasonido/version.json";  // URL del JSON de versiones
-const char* firmware_base_url = "http://ota.boisolo.com/ultrasonido/";  // URL base para los archivos de firmware
-const unsigned long ota_check_interval = 300000;  // Revisar actualizaciones cada 5 minutos
+const char* ota_version_url = "http://ota.boisolo.com/multi-sensor-iot/version.json";  // URL del JSON de versiones
+const char* firmware_base_url = "http://ota.boisolo.com/multi-sensor-iot/";  // URL base para los archivos de firmware
+const unsigned long ota_check_interval = 30000;   // Revisar actualizaciones cada 30 segundos
 unsigned long lastOtaCheck = 0;
 const int ota_timeout = 30000;  // Timeout para actualización OTA (30 segundos)
 
-// -- SISTEMA DE CONFIGURACIÓN PERSISTENTE --
-
-// Estructura para configuración de red
 struct NetworkConfig {
   bool dhcpEnabled;
   String staticIP;
@@ -108,7 +100,6 @@ struct NetworkConfig {
   String dns2;
 };
 
-// Estructura para configuración MQTT
 struct MQTTConfig {
   String server;
   int port;
@@ -119,7 +110,7 @@ struct MQTTConfig {
   int keepAlive;
 };
 
-// Estructura para configuración del dispositivo
+
 struct DeviceConfig {
   String deviceName;
   String location;
@@ -127,21 +118,30 @@ struct DeviceConfig {
   int readingsCount;
   bool debugMode;
 
-  // NUEVO: Configuración de sensores
   int sensorType; // 0=ultrasonido, 1=1 pulsador, 2=2 pulsadores, 3=vibración
   int button1Pin, button2Pin, vibrationPin;
   bool button1Invert, button2Invert;
   String button1Topic, button2Topic, vibrationTopic;
   String mainMqttTopic; // Topic principal para ultrasonido
   int vibrationThreshold; // Umbral de sensibilidad para vibraciones
+
+  int connectionMode; // 0=Ethernet, 1=WiFi, 2=Bluetooth, 3=Dual ETH+WiFi, 4=Dual WiFi+BT
 };
 
-// Variables globales de configuración
+
+struct WiFiConfig {
+  String ssid;
+  String password;
+  bool enabled;
+  int channel;
+  bool hidden;
+};
+
 NetworkConfig networkConfig;
 MQTTConfig mqttConfig;
 DeviceConfig deviceConfig;
+WiFiConfig wifiConfig;
 
-// Variables para estado de pulsadores
 bool button1State = false;
 bool button2State = false;
 bool lastButton1State = false;
@@ -149,13 +149,11 @@ bool lastButton2State = false;
 unsigned long lastButton1Change = 0;
 unsigned long lastButton2Change = 0;
 
-// Variables para sensor de vibraciones
 bool vibrationState = false;
 bool lastVibrationState = false;
 unsigned long lastVibrationChange = 0;
 unsigned long vibrationCooldown = 100; // 100ms cooldown entre detecciones
 
-// Variables para modo bridge/hotspot
 bool bridgeMode = false;
 bool hotspotMode = false;
 WebServer* configServer = NULL;
@@ -166,7 +164,13 @@ const unsigned long bridgeModeTimeout = 300000;   // 5 minutos timeout en modo b
 unsigned long bridgeModeEnterTime = 0;
 unsigned long hotspotModeEnterTime = 0;
 
-// Variables de estado del sistema
+
+bool wifiConnected = false;
+bool ethernetConnected = false;
+int currentConnectionMode = MODE_ETHERNET;
+unsigned long lastConnectionCheck = 0;
+const unsigned long connectionCheckInterval = 10000; // Revisar conexión cada 10 segundos
+
 struct SystemStatus {
   unsigned long uptime;
   unsigned long lastMQTTConnection;
@@ -182,7 +186,6 @@ struct SystemStatus {
 
 SystemStatus systemStatus;
 
-// -- Estructura para información de versión --
 struct FirmwareInfo {
   String version;
   String url;
@@ -191,33 +194,36 @@ struct FirmwareInfo {
   String release_notes;
 };
 
-// -- Prototipos de funciones OTA --
 bool checkForUpdates();
+bool checkForUpdatesSafe();
 bool performOTAUpdate(const FirmwareInfo& firmwareInfo);
+bool performSafeOTAUpdate(const FirmwareInfo& firmwareInfo);
 String getCurrentFirmwareVersion();
 bool compareVersions(const String& current, const String& available);
 String calculateSHA256(const String& filePath);
 
-// Prototipos de tareas y funciones
 void WiFiEvent(WiFiEvent_t event);
 bool reconectarMQTT();
 void sensorTask(void *pvParameters);
 
-// Funciones de lectura de sensores
 void readButtons();
 void readVibrationSensor();
 void publishButtonState(int buttonId, bool state, String topic);
 void publishVibrationState(bool state);
+void publishConnectionStatus();
 void mqttTask(void *pvParameters);
 void otaTask(void *pvParameters);
 
-// Prototipos de funciones de configuración
 void initializePreferences();
 void loadConfiguration();
 void saveConfiguration();
 void resetToDefaults();
 void setupSensorPins();
 void checkConfigButton();
+void initializeConnectionModules();
+void setupWiFi();
+void checkConnectionMode();
+void switchConnectionMode(int newMode);
 void enterBridgeMode();
 void exitBridgeMode();
 void enterHotspotMode();
@@ -231,7 +237,6 @@ void handleStatus();
 bool validateNetworkConfig(String ip, String gateway, String subnet);
 bool validateMQTTConfig(String server, int port);
 
-// Nuevas funciones para LEDs y modo hotspot
 void initializeLEDs();
 void updateStatusLEDs();
 void setOnlineStatus();
@@ -239,20 +244,16 @@ void setErrorStatus();
 void clearErrorStatus();
 void blinkLEDs(int times, int onTime, int offTime);
 
-// Funciones de protección OTA
 bool safeOTACheck();
 void rollbackToFirmware();
 void markBootAttempt();
 
-// Nuevas funciones de estado y mejoras
 void updateSystemStatus();
 void initializeSystemStatus();
 void checkBridgeTimeout();
 String generateSystemStatusJSON();
 void logSystemEvent(String event, String details = "");
 
-
-// El resto de tus funciones auxiliares (sortArray, calcularMediana, etc.) no necesitan cambios.
 void sortArray(int arr[], int n) {
   for (int i = 0; i < n - 1; i++) {
     for (int j = 0; j < n - i - 1; j++) {
@@ -275,8 +276,14 @@ int calcularMediana(int arr[], int n) {
 String generarClientId() {
   uint8_t mac[6];
   ETH.macAddress(mac); // Usamos la MAC de Ethernet
-  char id[25];
-  sprintf(id, "ESP32Client-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+  // Generar ClientID único con timestamp para evitar conflictos al reconectar
+  unsigned long timestamp = millis();
+  uint16_t randomNum = random(0xFFFF);
+
+  char id[40];
+  sprintf(id, "ESP32Client-%02X%02X%02X%02X%02X%02X-%04X-%08lX",
+          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], randomNum, timestamp);
   return String(id);
 }
 
@@ -286,56 +293,68 @@ void setup() {
   delay(500); // Pequeña pausa para que el monitor serie se estabilice
   Serial.println("\n\n--- INICIANDO MULTI-SENSOR IOT UNIVERSAL (WT32-ETH01) ---");
 
+  // RESET COMPLETO DE VARIABLES OTA (v1.6.1) - Forzar actualización sin backoff
+  // IMPORTANTE: Las variables se resetean en otaTask() para evitar problemas de declaración
+  Serial.println("🔄 [RESET OTA] Las variables OTA se resetearán en otaTask() - v1.6.1");
+  Serial.println("🔄 [RESET OTA] Backoff será eliminado - verificará inmediatamente");
+
   sensorMutex = xSemaphoreCreateMutex();
 
-  // Configuración de pines para LEDs y botón de configuración
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
   pinMode(CONFIG_LED_PIN, OUTPUT);
   pinMode(STATUS_LED_PIN, OUTPUT);
   pinMode(ERROR_LED_PIN, OUTPUT);
 
-  // La configuración de pines de sensor se hará después de cargar configuración
-
-  // Inicializar LEDs
   initializeLEDs();
 
-  // Inicializar sistema de configuración persistente
   Serial.println("Inicializando sistema de configuración...");
   initializePreferences();
   loadConfiguration();
-
-  // Configurar pines de sensor según tipo
   setupSensorPins();
-
-  // Inicializar sistema de estado y monitoreo
   Serial.println("Inicializando sistema de estado...");
   initializeSystemStatus();
+  Serial.println("Inicializando módulos de conexión...");
+  initializeConnectionModules();
 
-  // Verificar si debemos entrar en modo bridge o hotspot (botón presionado al inicio)
-  checkConfigButton();
+  bool hasConfig = false;
+  if (wifiConfig.enabled && wifiConfig.ssid.length() > 0) {
+    hasConfig = true;
+    Serial.println("Configuración WiFi encontrada");
+  }
+  if (mqttConfig.server.length() > 0) {
+    hasConfig = true;
+    Serial.println("Configuración MQTT encontrada");
+  }
+
+  if (!hasConfig) {
+    Serial.println("📡 No hay configuración previa - Entrando en modo hotspot automático");
+    hotspotMode = true;
+    enterHotspotMode();
+    return;
+  }
+
+  
+  
+checkConfigButton();
 
   if (bridgeMode) {
     enterBridgeMode();
-    return; // Salir de setup si estamos en modo bridge
+    return;
   }
 
   if (hotspotMode) {
     enterHotspotMode();
-    return; // Salir de setup si estamos en modo hotspot
+    return;
   }
 
-  // Marcar intento de boot (para protección OTA)
   markBootAttempt();
 
-  // -- INICIO: INICIALIZACIÓN DE RED --
 
   Serial.println("Configurando conexión Ethernet...");
   WiFi.onEvent(WiFiEvent);
 
   Serial.println("Intentando conectar a la red por RJ45...");
   ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_TYPE, ETH_CLK_MODE);
-  
-  // -- FIN: INICIALIZACIÓN DE RED --
 
   // Configurar MQTT con valores guardados
   client.setServer(mqttConfig.server.c_str(), mqttConfig.port);
@@ -349,17 +368,37 @@ void setup() {
 
   lastSensorRestart = millis();
 
-  // Creación de tareas
-  xTaskCreatePinnedToCore(sensorTask, "Sensor Task", 10000, NULL, 1, NULL, 0);
+  // Crear tareas según el tipo de sensor
+  switch(deviceConfig.sensorType) {
+    case SENSOR_ULTRASONIC:
+      Serial.println("Creando tarea de sensor ultrasónico");
+      xTaskCreatePinnedToCore(sensorTask, "Sensor Task", 10000, NULL, 1, NULL, 0);
+      break;
+    case SENSOR_SINGLE_BUTTON:
+    case SENSOR_DUAL_BUTTONS:
+    case SENSOR_VIBRATION:
+      Serial.println("Omitiendo tarea de sensor ultrasónico (tipo: " + String(deviceConfig.sensorType) + ")");
+      break;
+    default:
+      Serial.println("Tipo de sensor desconocido, creando tarea ultrasónica por defecto");
+      xTaskCreatePinnedToCore(sensorTask, "Sensor Task", 10000, NULL, 1, NULL, 0);
+      break;
+  }
+
+  // Crear tareas comunes
+  Serial.println("Creando tarea MQTT...");
   xTaskCreatePinnedToCore(mqttTask, "MQTT Task", 10000, NULL, 1, NULL, 1);
-  xTaskCreatePinnedToCore(otaTask, "OTA Task", 10000, NULL, 2, NULL, 1);  // Prioridad 2 para OTA
+  Serial.println("Creando tarea OTA...");
+  xTaskCreatePinnedToCore(otaTask, "OTA Task", 10000, NULL, 2, NULL, 1);
+  Serial.println("Tareas creadas exitosamente");  
 }
 
 void loop() {
-  // Si estamos en modo bridge, manejar solicitudes web y verificar botón
+  // Siempre revisar el botón de configuración
+  checkConfigButton();
+
   if (bridgeMode) {
-    checkConfigButton(); // Verificar si se presiona el botón para salir del modo bridge
-    checkBridgeTimeout(); // Verificar timeout del modo bridge
+    checkBridgeTimeout();
     if (configServer) {
       configServer->handleClient();
     }
@@ -367,11 +406,7 @@ void loop() {
     return;
   }
 
-  // Si estamos en modo hotspot, manejar solicitud web y verificar botón
   if (hotspotMode) {
-    checkConfigButton(); // Verificar si se presiona el botón para salir del modo hotspot
-
-    // Parpadear ambos LEDs en modo hotspot
     static unsigned long lastHotspotBlink = 0;
     static bool hotspotBlinkState = false;
 
@@ -389,11 +424,12 @@ void loop() {
     return;
   }
 
-  // Operación normal - leer sensores no-ultrasonidos
   readButtons();
   readVibrationSensor();
 
-  // Operación normal - actualizar estado del sistema y LEDs
+
+  // Operación normal - verificar modo de conexión y estado del sistema
+  checkConnectionMode();
   updateSystemStatus();
   updateStatusLEDs();
 
@@ -403,13 +439,16 @@ void loop() {
     Serial.println("Reinicio programado del ESP32...");
     ESP.restart();
   }
-  delay(1000);
+
+  // Pequeño delay para no sobrecargar el CPU
+  delay(50);
 }
 
 // Tarea para leer el sensor de ultrasonido (compatible con JSN-SR04T en modo por defecto)
 void sensorTask(void *pvParameters) {
   long duration;
   int distance;
+  int localSensorInterval = deviceConfig.sensorInterval; // Copia local para evitar accesos concurrentes
 
   for (;;) {
     // Generar el pulso de disparo (trigger)
@@ -453,8 +492,8 @@ void sensorTask(void *pvParameters) {
       }
     }
     
-    // Espera 50 ms para la siguiente lectura para evitar interferencias
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    // Esperar el intervalo configurado para la siguiente lectura
+    vTaskDelay(localSensorInterval / portTICK_PERIOD_MS);
   }
 }
 
@@ -587,17 +626,74 @@ void publishVibrationState(bool state) {
   }
 }
 
-// Tarea de MQTT (sin cambios)
+// Publicar mensaje de conexión al topic fijo
+void publishConnectionStatus() {
+  if (client.connected()) {
+    StaticJsonDocument<512> doc;
+    char jsonBuffer[512];
+
+    // Información básica del dispositivo
+    doc["device"] = deviceConfig.deviceName;
+    doc["location"] = deviceConfig.location;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["mac"] = WiFi.macAddress();
+
+    // Información de configuración
+    doc["sensor_type"] = deviceConfig.sensorType;
+    doc["connection_mode"] = deviceConfig.connectionMode;
+    doc["wifi_enabled"] = wifiConfig.enabled;
+    doc["wifi_ssid"] = wifiConfig.ssid;
+
+    // Información de MQTT
+    doc["mqtt_server"] = mqttConfig.server;
+    doc["mqtt_port"] = mqttConfig.port;
+
+    // Estado actual
+    doc["status"] = "online";
+    doc["uptime"] = millis();
+    doc["free_heap"] = ESP.getFreeHeap();
+    doc["firmware_version"] = String(FW_VERSION);
+    doc["timestamp"] = millis();
+
+    serializeJson(doc, jsonBuffer);
+
+    // Publicar al topic fijo (no configurable)
+    bool result = client.publish("multi-sensor/status", jsonBuffer);
+
+    Serial.println("=================================");
+    Serial.println("MQTT > STATUS DE CONEXIÓN PUBLICADO");
+    Serial.print("Topic: multi-sensor/status");
+    Serial.print(" | Resultado: ");
+    Serial.println(result ? "OK" : "FALLÓ");
+    Serial.println("Mensaje:");
+    Serial.println(jsonBuffer);
+    Serial.println("=================================");
+  }
+}
+
+// Tarea de MQTT con debug mejorado
 void mqttTask(void *pvParameters) {
   unsigned long lastPublishTime = 0;
+  Serial.println("🔄 MQTT Task iniciada");
+
   for (;;) {
-    if (!eth_connected) {
+    // Verificar WiFi primero
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("❌ MQTT: WiFi no conectado, esperando...");
       vTaskDelay(1000 / portTICK_PERIOD_MS);
       continue;
     }
 
+    // Verificar conexión MQTT
     if (!client.connected()) {
-      reconectarMQTT();
+      Serial.println("❌ MQTT: Desconectado, intentando reconectar...");
+      if (reconectarMQTT()) {
+        Serial.println("✅ MQTT: Reconexión exitosa");
+      } else {
+        Serial.println("❌ MQTT: Fallo en reconexión, reintentando en 5s");
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
+        continue;
+      }
     }
     
     client.loop();
@@ -662,7 +758,7 @@ void WiFiEvent(WiFiEvent_t event) {
 }
 
 
-// Función para reconectar a MQTT (sin cambios)
+// Función para reconectar a MQTT con mensaje de status
 bool reconectarMQTT() {
   String clientId = mqttConfig.clientId.length() > 0 ? mqttConfig.clientId : generarClientId();
   Serial.print("MQTT > Intentando reconectar con ClientID: ");
@@ -682,6 +778,14 @@ bool reconectarMQTT() {
 
   if (connected) {
     Serial.println("MQTT > Conectado al broker.");
+
+    // Esperar un momento para asegurar conexión estable antes de publicar
+    Serial.println("MQTT > Esperando conexión estable...");
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+
+    // Publicar mensaje de status al conectar (topic fijo)
+    publishConnectionStatus();
+
     return true;
   } else {
     Serial.print("MQTT > Fallo la conexión, rc=");
@@ -700,18 +804,80 @@ void reiniciarESP32() {
 // -- FUNCIONES OTA --
 
 // Tarea para verificar y realizar actualizaciones OTA
-void otaTask(void *pvParameters) {
-  for (;;) {
-    // Esperar a que haya conexión Ethernet antes de verificar actualizaciones
-    if (eth_connected) {
-      if (checkForUpdates()) {
-        Serial.println("OTA > Se encontró una actualización, procediendo con la instalación...");
-        // checkForUpdates() ya maneja la actualización si es necesaria
-      }
-    }
+// Variables globales para control OTA
+bool otaInProgress = false;
+unsigned long lastOTAAttempt = 0;
+int otaFailureCount = 0;
+bool otaUpdatePending = false;  // Nueva: bandera para actualización pendiente
+String pendingOtaUrl = "";      // Nueva: URL del firmware pendiente
+String pendingOtaChecksum = ""; // Nueva: Checksum del firmware pendiente
 
+void otaTask(void *pvParameters) {
+  // RESET COMPLETO DE VARIABLES OTA (v1.6.1) - Forzar actualización sin backoff
+  otaInProgress = false;
+  lastOTAAttempt = 0;  // IMPORTANTE: Resetear a 0 para evitar backoff
+  otaFailureCount = 0; // IMPORTANTE: Resetear a 0 para evitar backoff
+  otaUpdatePending = false;
+  pendingOtaUrl = "";
+  pendingOtaChecksum = "";
+  Serial.println("🔄 [RESET OTA] Variables OTA reseteadas completamente - v1.6.1");
+  Serial.println("🔄 [RESET OTA] Backoff desactivado - verificará inmediatamente");
+  Serial.println("=================================================");
+  Serial.println("🚀 OTA > INICIANDO SISTEMA DE ACTUALIZACIONES v1.6.1 [SIN BACKOFF]");
+  Serial.println("📊 OTA > Intervalo de verificación: " + String(ota_check_interval/1000) + " segundos");
+  Serial.println("⏱️  OTA > Timeout de descarga: " + String(ota_timeout/1000) + " segundos");
+  Serial.println("🔒 OTA > Modo seguro con reintentos exponenciales activado");
+  Serial.println("📈 OTA > Contador de verificaciones activado");
+  Serial.println("🔍 OTA > DEBUGGING DETALLADO DEL PROCESO OTA ACTIVADO");
+  Serial.println("💡 OTA > INDICADOR LED DE ESTADO OTA ACTIVADO");
+  Serial.println("🚀 OTA > VERIFICACIÓN INMEDIATA AL CONECTAR WIFI");
+  Serial.println("🔄 OTA -> RESET BACKOFF PARA DESARROLLO");
+  Serial.println("⚡ OTA -> SIN ESPERAR ENTRE INTENTOS");
+  Serial.println("🎯 OTA -> VERSIÓN DEPURACIÓN DE BACKOFF");
+  Serial.println("=================================================");
+
+  unsigned long checkCount = 0;
+
+  for (;;) {
     // Esperar el intervalo de verificación OTA
     vTaskDelay(ota_check_interval / portTICK_PERIOD_MS);
+
+    // Incrementar contador
+    checkCount++;
+
+    // No verificar actualizaciones si ya hay una en curso o hay demasiados fallos recientes
+    if (otaInProgress || otaFailureCount >= 3) {
+      if (otaFailureCount >= 3) {
+        vTaskDelay(300000 / portTICK_PERIOD_MS); // Esperar 5 minutos si hay muchos fallos
+        Serial.println("OTA > Demasiados fallos, esperando 5 minutos...");
+      }
+      continue;
+    }
+
+    // Esperar a que haya conexión (Ethernet o WiFi) antes de verificar actualizaciones
+    bool networkConnected = (eth_connected || WiFi.status() == WL_CONNECTED);
+
+    if (!networkConnected) {
+      Serial.println("📶 OTA > [" + String(checkCount) + "] Sin conexión de red, esperando...");
+      Serial.println("   ETH: " + String(eth_connected ? "✅" : "❌") +
+                     " | WiFi: " + String(WiFi.status() == WL_CONNECTED ? "✅" : "❌"));
+    } else {
+      // Indicador LED: Parpadeo azul cuando verifica OTA
+      digitalWrite(CONFIG_LED_PIN, HIGH);
+      delay(100);
+      digitalWrite(CONFIG_LED_PIN, LOW);
+
+      Serial.println("🌐 OTA > [" + String(checkCount) + "] Conexión detectada - Verificando actualizaciones...");
+      Serial.println("   ETH: " + String(eth_connected ? "✅" : "❌") +
+                     " | WiFi: " + String(WiFi.status() == WL_CONNECTED ? "✅" : "❌"));
+
+      if (checkForUpdatesSafe()) {
+        Serial.println("🎉 OTA > ¡ACTUALIZACIÓN EN PROGRESO! Reiniciando...");
+        // checkForUpdatesSafe() ya maneja la actualización de forma segura
+      } else {
+        Serial.println("✅ OTA > Verificación completada - No hay actualizaciones disponibles");
+      }
+    }
   }
 }
 
@@ -794,14 +960,14 @@ bool performOTAUpdate(const FirmwareInfo& firmwareInfo) {
   Serial.println(firmwareInfo.url);
 
   // Detener tareas críticas pero mantener MQTT activo para reportar estado
-  vTaskSuspendAll();
+  // vTaskSuspendAll(); // Comentado para evitar crash FreeRTOS (v1.6.1)
 
   HTTPClient http;
   http.setTimeout(ota_timeout);
 
   if (!http.begin(firmwareInfo.url)) {
     Serial.println("OTA > No se pudo conectar al servidor de firmware");
-    xTaskResumeAll();
+    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.1)
     return false;
   }
 
@@ -836,26 +1002,325 @@ bool performOTAUpdate(const FirmwareInfo& firmwareInfo) {
 
   // Si la actualización falló, reanudar tareas
   if (!success) {
-    xTaskResumeAll();
+    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.1)
     Serial.println("OTA > Actualización fallida, reanudando operaciones normales");
   }
 
   return success;
 }
 
-// Obtener versión actual del firmware
-String getCurrentFirmwareVersion() {
-  const esp_partition_t *running_partition = esp_ota_get_running_partition();
-  if (running_partition != NULL) {
-    esp_app_desc_t app_desc;
-    if (esp_ota_get_partition_description(running_partition, &app_desc) == ESP_OK) {
-      Serial.printf("OTA > Versión del app_desc: %s\n", app_desc.version);
-      return String(app_desc.version);
-    }
+// Versión segura de performOTAUpdate con mejor manejo de FreeRTOS
+bool performSafeOTAUpdate(const FirmwareInfo& firmwareInfo) {
+  Serial.println("OTA > Iniciando actualización segura del firmware...");
+  Serial.print("OTA > URL del firmware: ");
+  Serial.println(firmwareInfo.url);
+
+  if (firmwareInfo.checksum.length() > 0) {
+    Serial.print("OTA > Checksum esperado: ");
+    Serial.println(firmwareInfo.checksum);
   }
 
-  // Si no podemos obtener la versión de app_desc, usamos la versión de compilación
-  Serial.println("OTA > Usando versión de compilación");
+  bool success = false;
+
+  try {
+    // ACTUALIZACIÓN DIRECTA CON HTTPUpdate (v1.6.1) - Sin banderas pendientes
+    Serial.println("OTA > Ejecutando actualización directa con HTTPUpdate...");
+    Serial.printf("OTA > Memoria libre antes de actualizar: %d bytes\n", ESP.getFreeHeap());
+
+    // Detener MQTT si está conectado para evitar conflictos
+    if (client.connected()) {
+      Serial.println("OTA > Desconectando MQTT...");
+      client.disconnect();
+      delay(1000); // Esperar a que se complete la desconexión
+    }
+
+    // Detener servidor web si está activo
+    if (configServer) {
+      Serial.println("OTA > Deteniendo servidor web...");
+      configServer->stop();
+      delay(500); // Esperar a que se detenga completamente
+    }
+
+    // ACTUALIZACIÓN DIRECTA con Update (método ESP32 nativo) - v1.6.1
+    Serial.println("OTA > 🔄 Iniciando actualización directa con Update...");
+
+    // Crear HTTPClient para descarga
+    HTTPClient http;
+    http.setTimeout(ota_timeout);
+
+    if (!http.begin(firmwareInfo.url)) {
+      Serial.println("OTA > ❌ Error: No se pudo iniciar conexión HTTP");
+      otaFailureCount++;
+      return false;
+    }
+
+    Serial.println("OTA > 🔄 Descargando firmware...");
+    int httpCode = http.GET();
+
+    if (httpCode != HTTP_CODE_OK) {
+      Serial.printf("OTA > ❌ Error HTTP %d: %s\n", httpCode, http.errorToString(httpCode).c_str());
+      http.end();
+      otaFailureCount++;
+      return false;
+    }
+
+    int contentLength = http.getSize();
+    if (contentLength <= 0) {
+      Serial.println("OTA > ❌ Error: No se pudo obtener el tamaño del firmware");
+      http.end();
+      otaFailureCount++;
+      return false;
+    }
+
+    Serial.printf("OTA > 📦 Tamaño del firmware: %d bytes\n", contentLength);
+
+    // Verificar espacio disponible
+    size_t sketchSpace = ESP.getFreeSketchSpace();
+    if (contentLength > sketchSpace) {
+      Serial.printf("OTA > ❌ Error: No hay espacio suficiente. Disponible: %d bytes\n", sketchSpace);
+      http.end();
+      otaFailureCount++;
+      return false;
+    }
+
+    // Iniciar actualización
+    if (!Update.begin(contentLength)) {
+      Serial.printf("OTA > ❌ Error al iniciar actualización: %d\n", Update.getError());
+      http.end();
+      otaFailureCount++;
+      return false;
+    }
+
+    // Configurar headers
+    http.addHeader("User-Agent", "ESP32-OTA-Client/v1.6.1");
+
+    // Descargar y escribir firmware
+    Serial.println("OTA > 🔄 Escribiendo firmware en partición OTA...");
+    WiFiClient *stream = http.getStreamPtr();
+    size_t written = Update.writeStream(*stream);
+
+    if (written != contentLength) {
+      Serial.printf("OTA > ❌ Error: Solo se escribieron %d de %d bytes\n", written, contentLength);
+      Serial.printf("OTA > ❌ Error de actualización: %s\n", Update.errorString());
+      http.end();
+      Update.abort();
+      otaFailureCount++;
+      return false;
+    }
+
+    // Finalizar actualización
+    if (!Update.end()) {
+      Serial.printf("OTA > ❌ Error finalizando actualización: %s\n", Update.errorString());
+      http.end();
+      otaFailureCount++;
+      return false;
+    }
+
+    http.end();
+
+    Serial.println("OTA > ✅ Actualización completada exitosamente!");
+    Serial.println("OTA > 🔄 Reiniciando dispositivo...");
+
+    // Resetear contador de fallos en éxito
+    otaFailureCount = 0;
+    lastOTAAttempt = 0;
+
+    delay(1000);
+    ESP.restart();
+    return true;
+
+  } catch (...) {
+    Serial.println("OTA > ❌ Excepción durante el proceso de actualización");
+    otaFailureCount++;
+    return false;
+  }
+}
+
+// Versión segura de checkForUpdates con debugging intensivo
+bool checkForUpdatesSafe() {
+  Serial.println("🔍 [DEBUG] checkForUpdatesSafe() INICIADO");
+  Serial.println("🔍 [DEBUG] Versión actual: " + String(FW_VERSION));
+
+  // Prevenir múltiples intentos simultáneos
+  if (otaInProgress) {
+    Serial.println("🔍 [DEBUG] OTA ya en progreso, saliendo");
+    return false;
+  }
+
+  // FORZAR VERIFICACIÓN INMEDIATA - SIN BACKOFF (v1.6.1)
+  unsigned long now = millis();
+  otaInProgress = true;
+  lastOTAAttempt = now;
+
+  Serial.println("🔍 [DEBUG] Forzando verificación inmediata - sin backoff");
+  Serial.println("🔍 [DEBUG] Fallos: " + String(otaFailureCount) + ", Reseteados para desarrollo");
+
+  Serial.println("OTA > Iniciando verificación segura de actualizaciones...");
+  Serial.println("🌐 [INFO] Versión remota se mostrará siempre para debugging");
+  Serial.println("🔍 [DEBUG] WiFi status: " + String(WiFi.status()));
+  Serial.println("🔍 [DEBUG] WiFi connected: " + String(WiFi.isConnected() ? "SÍ" : "NO"));
+  Serial.println("🔍 [DEBUG] IP actual: " + WiFi.localIP().toString());
+
+  bool success = false;
+
+  // Usar contexto seguro para operaciones de red
+  HTTPClient http;
+  http.setTimeout(ota_timeout);
+
+  Serial.println("🔍 [DEBUG] URL de versiones: " + String(ota_version_url));
+  Serial.println("🔍 [DEBUG] Timeout HTTP: " + String(ota_timeout/1000) + "s");
+  Serial.println("🔍 [DEBUG] Iniciando conexión HTTP...");
+
+  try {
+    // Obtener información de versión del servidor
+    Serial.println("🔍 [DEBUG] Iniciando conexión HTTP...");
+    if (!http.begin(ota_version_url)) {
+      Serial.println("🔍 [ERROR] No se pudo iniciar conexión HTTP");
+      otaFailureCount++;
+      goto cleanup;
+    }
+
+    Serial.println("🔍 [DEBUG] Enviando request GET...");
+    int httpCode = http.GET();
+    Serial.println("🔍 [DEBUG] Código HTTP recibido: " + String(httpCode));
+
+    if (httpCode != HTTP_CODE_OK) {
+      Serial.print("OTA > Error al obtener información de versión, código HTTP: ");
+      Serial.println(httpCode);
+      otaFailureCount++;
+      goto cleanup;
+    }
+
+    // Parsear JSON de versión
+    Serial.println("🔍 [DEBUG] Obteniendo payload JSON...");
+    String payload = http.getString();
+    Serial.println("🔍 [DEBUG] Payload recibido (" + String(payload.length()) + " bytes):");
+    Serial.println("🔍 [DEBUG] " + payload);
+    http.end();
+
+    DynamicJsonDocument doc(1024);
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (error) {
+      Serial.println("🔍 [ERROR] Error al parsear JSON de versión: " + String(error.c_str()));
+      Serial.println("🔍 [ERROR] Payload que falló el parseo:");
+      Serial.println("🔍 [ERROR] " + payload);
+      otaFailureCount++;
+      goto cleanup;
+    }
+
+    // Extraer información del firmware
+    FirmwareInfo firmwareInfo;
+    firmwareInfo.version = doc["version"].as<String>();
+    firmwareInfo.url = doc["url"].as<String>();
+    firmwareInfo.checksum = doc["checksum"].as<String>();
+    firmwareInfo.mandatory = doc["mandatory"] | false;
+    firmwareInfo.release_notes = doc["release_notes"].as<String>();
+
+    // Obtener versión actual
+    String currentVersion = getCurrentFirmwareVersion();
+    Serial.println("🔍 [DEBUG] Versión actual: " + currentVersion);
+    Serial.println("🌐 [REMOTE] Versión disponible en servidor: " + firmwareInfo.version);
+    Serial.println("📊 [COMPARE] " + currentVersion + " vs " + firmwareInfo.version);
+
+    // Si hay notas de lanzamiento, mostrarlas
+    if (firmwareInfo.release_notes.length() > 0) {
+      Serial.print("OTA > Notas de la versión: ");
+      Serial.println(firmwareInfo.release_notes);
+    }
+
+    // Comparar versiones
+    Serial.println("🔍 [DEBUG] Comparando versiones...");
+    bool updateNeeded = compareVersions(currentVersion, firmwareInfo.version);
+    Serial.println("🔍 [DEBUG] ¿Se necesita actualización? " + String(updateNeeded ? "SÍ" : "NO"));
+
+    if (updateNeeded) {
+      Serial.println("🔍 [DEBUG] ¡ACTUALIZACIÓN DISPONIBLE! Iniciando descarga...");
+
+      // Indicador LED: Parpadeo rápido azul cuando actualiza
+      for(int i=0; i<5; i++) {
+        digitalWrite(CONFIG_LED_PIN, HIGH);
+        delay(50);
+        digitalWrite(CONFIG_LED_PIN, LOW);
+        delay(50);
+      }
+
+      // Para actualizaciones obligatorias, forzar la instalación
+      if (firmwareInfo.mandatory) {
+        Serial.println("🔍 [DEBUG] Actualización obligatoria, instalando...");
+        success = performSafeOTAUpdate(firmwareInfo);
+      } else {
+        // Para actualizaciones opcionales, preguntar al usuario (o instalar automáticamente)
+        Serial.println("🔍 [DEBUG] Actualización opcional, instalando automáticamente...");
+        success = performSafeOTAUpdate(firmwareInfo);
+      }
+    } else {
+      Serial.println("🔍 [DEBUG] Firmware actualizado, no se necesita actualización");
+      otaFailureCount = 0; // Resetear contador de fallos
+    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.1) en éxito
+      lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.1)
+      success = false;
+    }
+
+  } catch (...) {
+    Serial.println("OTA > Excepción durante la verificación de actualizaciones");
+    otaFailureCount++;
+    success = false;
+  }
+
+cleanup:
+  otaInProgress = false;
+
+  if (success) {
+    Serial.println("OTA > Actualización completada exitosamente");
+    otaFailureCount = 0; // Resetear contador de fallos
+    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.1)
+
+    // Esperar un momento antes de reiniciar
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    ESP.restart();
+
+    return true;
+  } else {
+    Serial.print("OTA > Verificación fallida, contador de fallos: ");
+    Serial.println(otaFailureCount);
+
+    // IMPORTANTE: Mostrar versión remota siempre, incluso si falló
+    Serial.println("🌐 [FALLBACK] Intentando obtener versión remota para debugging...");
+    try {
+      HTTPClient fallbackHttp;
+      fallbackHttp.setTimeout(10000); // 10 segundos timeout
+      if (fallbackHttp.begin(ota_version_url)) {
+        int fallbackCode = fallbackHttp.GET();
+        if (fallbackCode == HTTP_CODE_OK) {
+          String fallbackPayload = fallbackHttp.getString();
+          DynamicJsonDocument fallbackDoc(512);
+          if (deserializeJson(fallbackDoc, fallbackPayload) == DeserializationError::Ok) {
+            String remoteVersion = fallbackDoc["version"].as<String>();
+            Serial.println("🌐 [REMOTE] Versión en servidor (fallback): " + remoteVersion);
+            Serial.println("📊 [COMPARE] Local: " + String(FW_VERSION) + " vs Remoto: " + remoteVersion);
+          } else {
+            Serial.println("🌐 [REMOTE] Error parseando JSON fallback");
+          }
+        } else {
+          Serial.println("🌐 [REMOTE] Error HTTP fallback: " + String(fallbackCode));
+        }
+        fallbackHttp.end();
+      } else {
+        Serial.println("🌐 [REMOTE] Error conexión fallback");
+      }
+    } catch (...) {
+      Serial.println("🌐 [REMOTE] Excepción en fallback");
+    }
+
+    return false;
+  }
+}
+
+// Obtener versión actual del firmware
+String getCurrentFirmwareVersion() {
+  // Usar siempre nuestra versión definida en tiempo de compilación
+  Serial.println("OTA > Usando versión FW_VERSION del firmware: " + String(FW_VERSION));
   return String(FW_VERSION);
 }
 
@@ -906,7 +1371,7 @@ String calculateSHA256(const String& filePath) {
 
 void initializePreferences() {
   preferences.begin("sensor-config", false);
-  Serial.println("Sistema de preferencias inicializado");
+  Serial.println("Sistema de preferencias inicializado (persistente OTA)");
 }
 
 void loadConfiguration() {
@@ -945,7 +1410,17 @@ void loadConfiguration() {
   deviceConfig.button2Topic = preferences.getString("button2Topic", "sensor/button2");
   deviceConfig.vibrationTopic = preferences.getString("vibrationTopic", "sensor/vibration");
   deviceConfig.mainMqttTopic = preferences.getString("mainMqttTopic", "multi-sensor/iot");
-  deviceConfig.vibrationThreshold = preferences.getInt("vibrationThreshold", 100); // 100ms por defecto
+  deviceConfig.vibrationThreshold = preferences.getInt("vibrThresh", 100); // 100ms por defecto
+
+  // Cargar configuración WiFi
+  wifiConfig.ssid = preferences.getString("wifiSSID", "");
+  wifiConfig.password = preferences.getString("wifiPassword", "");
+  wifiConfig.enabled = preferences.getBool("wifiEnabled", false);
+  wifiConfig.channel = preferences.getInt("wifiChannel", 0);
+  wifiConfig.hidden = preferences.getBool("wifiHidden", false);
+
+  // Cargar modo de conexión (por defecto Ethernet)
+  deviceConfig.connectionMode = preferences.getInt("connectionMode", MODE_ETHERNET);
 
   Serial.println("Configuración cargada exitosamente");
 }
@@ -986,7 +1461,17 @@ void saveConfiguration() {
   preferences.putString("button2Topic", deviceConfig.button2Topic);
   preferences.putString("vibrationTopic", deviceConfig.vibrationTopic);
   preferences.putString("mainMqttTopic", deviceConfig.mainMqttTopic);
-  preferences.putInt("vibrationThreshold", deviceConfig.vibrationThreshold);
+  preferences.putInt("vibrThresh", deviceConfig.vibrationThreshold);
+
+  // Guardar configuración WiFi
+  preferences.putString("wifiSSID", wifiConfig.ssid);
+  preferences.putString("wifiPassword", wifiConfig.password);
+  preferences.putBool("wifiEnabled", wifiConfig.enabled);
+  preferences.putInt("wifiChannel", wifiConfig.channel);
+  preferences.putBool("wifiHidden", wifiConfig.hidden);
+
+  // Guardar modo de conexión
+  preferences.putInt("connectionMode", deviceConfig.connectionMode);
 
   Serial.println("Configuración guardada exitosamente");
 }
@@ -1169,6 +1654,15 @@ void enterHotspotMode() {
   hotspotMode = true;
   hotspotModeEnterTime = millis();
 
+  // Inicializar LittleFS para archivos web
+  if (!LittleFS.begin(true)) {
+    Serial.println("Error: No se pudo inicializar LittleFS");
+    logSystemEvent("LITTLEFS_ERROR", "Error al inicializar LittleFS en modo hotspot");
+  } else {
+    Serial.println("LittleFS inicializado correctamente");
+    logSystemEvent("LITTLEFS_OK", "LittleFS inicializado en modo hotspot");
+  }
+
   // Apagar ambos LEDs inicialmente
   digitalWrite(STATUS_LED_PIN, LOW);
   digitalWrite(ERROR_LED_PIN, LOW);
@@ -1282,19 +1776,84 @@ void setupWebServer() {
     configServer->sendHeader("Access-Control-Allow-Origin", "*");
     configServer->send(200, "application/json", generateSystemStatusJSON());
   });
-  configServer->on("/exit", HTTP_POST, [](){
+  configServer->on("/exit", HTTP_ANY, [](){
+    String method = (configServer->method() == HTTP_GET) ? "GET" : "POST";
+
     if (bridgeMode) {
-      logSystemEvent("BRIDGE_EXIT", "Usuario solicitó salir del modo bridge");
-      configServer->send(200, "text/html",
-        "<html><body><h2>Saliendo del modo bridge...</h2><p>El dispositivo se reiniciará en modo normal.</p></body></html>");
-      delay(1000);
+      logSystemEvent("BRIDGE_EXIT", "Usuario solicitó salir del modo bridge (" + method + ")");
+
+      String html = R"(
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Saliendo del Modo Configuración</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f0f0; }
+        .container { max-width: 600px; margin: 50px auto; background: white; padding: 30px; border-radius: 10px; text-align: center; }
+        h1 { color: #4CAF50; margin-bottom: 20px; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #4CAF50; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .message { color: #666; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✅ Configuración Guardada</h1>
+        <div class="spinner"></div>
+        <div class="message">
+            <p><strong>Saliendo del modo configuración...</strong></p>
+            <p>El dispositivo se reiniciará automáticamente en modo normal</p>
+            <p>Por favor, espera unos segundos...</p>
+        </div>
+    </div>
+</body>
+</html>
+      )";
+
+      configServer->send(200, "text/html", html);
+      delay(3000);
       exitBridgeMode();
+
     } else if (hotspotMode) {
-      logSystemEvent("HOTSPOT_EXIT", "Usuario solicitó salir del modo hotspot");
-      configServer->send(200, "text/html",
-        "<html><body><h2>Saliendo del modo hotspot...</h2><p>El dispositivo se reiniciará en modo normal.</p></body></html>");
-      delay(1000);
+      logSystemEvent("HOTSPOT_EXIT", "Usuario solicitó salir del modo hotspot (" + method + ")");
+
+      String html = R"(
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Saliendo del Modo Configuración</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f0f0; }
+        .container { max-width: 600px; margin: 50px auto; background: white; padding: 30px; border-radius: 10px; text-align: center; }
+        h1 { color: #4CAF50; margin-bottom: 20px; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #4CAF50; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .message { color: #666; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✅ Configuración Guardada</h1>
+        <div class="spinner"></div>
+        <div class="message">
+            <p><strong>Saliendo del modo configuración...</strong></p>
+            <p>El dispositivo se reiniciará automáticamente en modo normal</p>
+            <p>Por favor, espera unos segundos...</p>
+        </div>
+    </div>
+</body>
+</html>
+      )";
+
+      configServer->send(200, "text/html", html);
+      delay(3000);
       exitHotspotMode();
+
+    } else {
+      configServer->send(200, "text/html",
+        "<html><body><h2>El dispositivo ya está en modo normal</h2><p><a href='/'>Volver al panel</a></p></body></html>");
     }
   });
 
@@ -1399,7 +1958,21 @@ void handleRoot() {
 }
 
 void handleSaveConfig() {
-  String message = "<html><body><div class='container'><h1>Configuración Guardada</h1>";
+  Serial.println("=== PROCESANDO GUARDADO DE CONFIGURACIÓN ===");
+
+  String message = "<html><body><div class='container'><h1>Guardando Configuración</h1>";
+
+  // Depurar: mostrar todos los argumentos recibidos (tanto en Serial como en la página)
+  String debugInfo = "<h3>Debug: Datos recibidos del formulario:</h3><ul style='background:#f0f0f0;padding:10px;border-radius:5px;font-family:monospace;font-size:12px;'>";
+  Serial.println("Argumentos recibidos del formulario:");
+
+  for (int i = 0; i < configServer->args(); i++) {
+    String argName = configServer->argName(i);
+    String argValue = configServer->arg(i);
+    Serial.println("  " + argName + " = " + argValue);
+    debugInfo += "<li><strong>" + argName + "</strong> = " + argValue + "</li>";
+  }
+  debugInfo += "</ul>";
 
   // Guardar configuración de red
   networkConfig.dhcpEnabled = configServer->hasArg("dhcpEnabled");
@@ -1408,6 +1981,11 @@ void handleSaveConfig() {
   networkConfig.subnet = configServer->arg("subnet");
   networkConfig.dns1 = configServer->arg("dns1");
   networkConfig.dns2 = configServer->arg("dns2");
+
+  // Guardar configuración WiFi
+  wifiConfig.enabled = configServer->hasArg("wifiEnabled");
+  wifiConfig.ssid = configServer->arg("wifiSSID");
+  wifiConfig.password = configServer->arg("wifiPassword");
 
   // Guardar configuración MQTT
   mqttConfig.server = configServer->arg("mqttServer");
@@ -1424,6 +2002,9 @@ void handleSaveConfig() {
   deviceConfig.sensorInterval = configServer->arg("sensorInterval").toInt();
   deviceConfig.readingsCount = configServer->arg("readingsCount").toInt();
   deviceConfig.debugMode = configServer->hasArg("debugMode");
+
+  // Guardar modo de conexión
+  deviceConfig.connectionMode = configServer->arg("connectionMode").toInt();
 
   // Cargar configuración de sensores desde el formulario
   deviceConfig.sensorType = configServer->arg("sensorType").toInt();
@@ -1466,6 +2047,11 @@ void handleSaveConfig() {
 
   if (configServer->hasArg("mainMqttTopic")) {
     deviceConfig.mainMqttTopic = configServer->arg("mainMqttTopic");
+    // Sincronizar con el topic principal MQTT si está vacío o es el valor por defecto
+    String mainTopic = configServer->arg("mainMqttTopic");
+    if (mqttConfig.topic.equals("sensor/distance") || mqttConfig.topic.length() == 0) {
+      mqttConfig.topic = mainTopic;
+    }
   }
 
   // Umbral de vibración
@@ -1473,33 +2059,73 @@ void handleSaveConfig() {
     deviceConfig.vibrationThreshold = configServer->arg("vibrationThreshold").toInt();
   }
 
+  
   // Validar configuración
   bool configValid = true;
   String errorMessage = "";
 
+  Serial.println("=== VALIDACIÓN DE CONFIGURACIÓN ===");
+  Serial.print("MQTT Server: '");
+  Serial.print(mqttConfig.server);
+  Serial.println("' (length: " + String(mqttConfig.server.length()) + ")");
+  Serial.print("MQTT Port: ");
+  Serial.println(mqttConfig.port);
+  Serial.print("DHCP Enabled: ");
+  Serial.println(networkConfig.dhcpEnabled ? "true" : "false");
+
   if (mqttConfig.server.length() == 0) {
     configValid = false;
     errorMessage += "El servidor MQTT es requerido<br>";
+    Serial.println("❌ MQTT server vacío");
   }
 
   if (!networkConfig.dhcpEnabled) {
     if (!validateNetworkConfig(networkConfig.staticIP, networkConfig.gateway, networkConfig.subnet)) {
       configValid = false;
       errorMessage += "La configuración de IP estática no es válida<br>";
+      Serial.println("❌ Configuración IP estática inválida");
     }
   }
 
   if (!validateMQTTConfig(mqttConfig.server, mqttConfig.port)) {
     configValid = false;
     errorMessage += "La configuración MQTT no es válida<br>";
+    Serial.println("❌ Validación MQTT falló");
   }
 
+  Serial.print("Resultado validación: ");
+  Serial.println(configValid ? "✅ VÁLIDA" : "❌ INVÁLIDA");
+  if (!configValid) {
+    Serial.print("Error message: ");
+    Serial.println(errorMessage);
+  }
+  Serial.println("================================");
+
+  // Añadir información de debug al mensaje
+  message += debugInfo;
+  message += "<hr>";
+
   if (configValid) {
+    Serial.println("✅ Configuración válida, guardando...");
     saveConfiguration();
+    logSystemEvent("CONFIG_SAVED", "Configuración guardada exitosamente desde panel web");
     message += "<div class='status success'>✅ Configuración guardada exitosamente!</div>";
     message += "<p>El dispositivo se reiniciará en modo normal.</p>";
+    message += "<div style='margin: 20px 0;'>";
+    message += "<p><strong>Configuración guardada:</strong></p>";
+    message += "<ul>";
+    message += "<li>WiFi: " + String(wifiConfig.enabled ? "Habilitado" : "Deshabilitado") + "</li>";
+    message += "<li>SSID: " + wifiConfig.ssid + "</li>";
+    message += "<li>Dispositivo: " + deviceConfig.deviceName + "</li>";
+    message += "<li>Ubicación: " + deviceConfig.location + "</li>";
+    message += "<li>MQTT Server: " + mqttConfig.server + ":" + mqttConfig.port + "</li>";
+    message += "<li>Topic: " + mqttConfig.topic + "</li>";
+    message += "</ul>";
+    message += "</div>";
     message += "<button onclick='setTimeout(function(){ window.location.href=\"/exit\"; }, 2000);'>Continuar</button>";
   } else {
+    Serial.println("❌ Error en la configuración: " + errorMessage);
+    logSystemEvent("CONFIG_ERROR", "Error en validación: " + errorMessage);
     message += "<div class='status error'>❌ Error en la configuración:</div>";
     message += "<p>" + errorMessage + "</p>";
     message += "<button onclick='history.back()'>Volver</button>";
@@ -1509,8 +2135,9 @@ void handleSaveConfig() {
   configServer->send(200, "text/html", message);
 
   if (configValid) {
-    delay(2000);
-    exitBridgeMode();
+    Serial.println("Reiniciando dispositivo en 3 segundos...");
+    delay(3000);
+    ESP.restart();
   }
 }
 
@@ -1729,6 +2356,31 @@ String generateSystemStatusJSON() {
   json += "\"hotspotMode\":" + String(hotspotMode ? "true" : "false") + ",";
   json += "\"ethConnected\":" + String(eth_connected ? "true" : "false") + ",";
 
+  // Configuración de red
+  json += "\"dhcpEnabled\":" + String(networkConfig.dhcpEnabled ? "true" : "false") + ",";
+  json += "\"staticIP\":\"" + networkConfig.staticIP + "\",";
+  json += "\"gateway\":\"" + networkConfig.gateway + "\",";
+  json += "\"subnet\":\"" + networkConfig.subnet + "\",";
+  json += "\"dns1\":\"" + networkConfig.dns1 + "\",";
+  json += "\"dns2\":\"" + networkConfig.dns2 + "\",";
+
+  // Configuración WiFi
+  json += "\"wifiEnabled\":" + String(wifiConfig.enabled ? "true" : "false") + ",";
+  json += "\"wifiSSID\":\"" + wifiConfig.ssid + "\",";
+  json += "\"wifiPassword\":\"" + String(wifiConfig.password.length() > 0 ? "***PROTECTED***" : "") + "\",";
+
+  // Configuración MQTT
+  json += "\"mqttServer\":\"" + mqttConfig.server + "\",";
+  json += "\"mqttPort\":" + String(mqttConfig.port) + ",";
+  json += "\"mqttUsername\":\"" + mqttConfig.username + "\",";
+  json += "\"mqttPassword\":\"" + String(mqttConfig.password.length() > 0 ? "***PROTECTED***" : "") + "\",";
+  json += "\"mqttTopic\":\"" + mqttConfig.topic + "\",";
+  json += "\"mqttClientId\":\"" + mqttConfig.clientId + "\",";
+  json += "\"mqttKeepAlive\":" + String(mqttConfig.keepAlive) + ",";
+
+  // Configuración de conexión
+  json += "\"connectionMode\":" + String(deviceConfig.connectionMode) + ",";
+
   // Configuración de sensores
   json += "\"sensorType\":" + String(deviceConfig.sensorType) + ",";
   json += "\"button1Pin\":" + String(deviceConfig.button1Pin) + ",";
@@ -1742,9 +2394,6 @@ String generateSystemStatusJSON() {
   json += "\"vibrationTopic\":\"" + deviceConfig.vibrationTopic + "\",";
   json += "\"mainMqttTopic\":\"" + deviceConfig.mainMqttTopic + "\",";
 
-  // Configuración básica del dispositivo
-  json += "\"deviceName\":\"" + deviceConfig.deviceName + "\",";
-  json += "\"location\":\"" + deviceConfig.location + "\",";
   json += "\"sensorInterval\":" + String(deviceConfig.sensorInterval) + ",";
   json += "\"readingsCount\":" + String(deviceConfig.readingsCount) + ",";
   json += "\"debugMode\":" + String(deviceConfig.debugMode ? "true" : "false") + "";
@@ -1785,4 +2434,167 @@ void logSystemEvent(String event, String details) {
     }
   }
 }
+
+// -- NUEVAS FUNCIONES PARA CONTROL DE CONEXIÓN --
+
+void initializeConnectionModules() {
+  Serial.println("🔧 Inicializando módulos de conexión...");
+  Serial.print("Modo de conexión configurado: ");
+
+  switch(deviceConfig.connectionMode) {
+    case MODE_ETHERNET:
+      Serial.println("Ethernet (únicamente)");
+      break;
+    case MODE_WIFI:
+      Serial.println("WiFi (únicamente)");
+      setupWiFi();
+      break;
+    case MODE_DUAL_ETH_WIFI:
+      Serial.println("Dual: Ethernet primario + WiFi backup");
+      setupWiFi();
+      break;
+    default:
+      Serial.println("No especificado - usando modo Ethernet por defecto");
+      deviceConfig.connectionMode = MODE_ETHERNET;
+      saveConfiguration();
+      break;
+  }
+
+  currentConnectionMode = deviceConfig.connectionMode;
+}
+
+void setupWiFi() {
+  if (!wifiConfig.enabled || wifiConfig.ssid.length() == 0) {
+    Serial.println("❌ WiFi no está habilitado o no hay SSID configurado");
+    return;
+  }
+
+  Serial.println("📶 Inicializando WiFi...");
+  Serial.print("Conectando a: ");
+  Serial.println(wifiConfig.ssid);
+
+  // Configurar WiFi
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false); // Mantener WiFi siempre activo
+
+  // Nota: WiFi.setChannel() no está disponible en ESP32 con modo STA
+  // Se usará el canal configurado en el AP si es necesario
+
+  // Intentar conexión
+  WiFi.begin(wifiConfig.ssid.c_str(), wifiConfig.password.c_str());
+
+  int attempts = 0;
+  const int maxAttempts = 20;
+
+  while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    wifiConnected = true;
+    Serial.println();
+    Serial.println("✅ WiFi conectado exitosamente");
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Señal (RSSI): ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
+
+    logSystemEvent("WIFI_CONNECTED", "IP: " + WiFi.localIP().toString() + " | SSID: " + wifiConfig.ssid);
+
+    // Sistema OTA con timer de 30 segundos - sin boot checks
+  } else {
+    wifiConnected = false;
+    Serial.println();
+    Serial.println("❌ Falló la conexión WiFi");
+    logSystemEvent("WIFI_FAILED", "No se pudo conectar a: " + wifiConfig.ssid);
+  }
+}
+
+
+void checkConnectionMode() {
+  unsigned long currentTime = millis();
+
+  // Revisar conexiones cada connectionCheckInterval
+  if (currentTime - lastConnectionCheck < connectionCheckInterval) {
+    return;
+  }
+
+  lastConnectionCheck = currentTime;
+
+  bool currentEthStatus = eth_connected; 
+  bool currentWifiStatus = (WiFi.status() == WL_CONNECTED);
+
+  if (currentEthStatus != ethernetConnected) {
+    ethernetConnected = currentEthStatus;
+    if (ethernetConnected) {
+      Serial.println("🌐 Ethernet conectado");
+      logSystemEvent("ETH_CONNECTED", "Link activo");
+    } else {
+      Serial.println("📵 Ethernet desconectado");
+      logSystemEvent("ETH_DISCONNECTED", "Link perdido");
+    }
+  }
+
+  if (currentWifiStatus != wifiConnected) {
+    wifiConnected = currentWifiStatus;
+    if (wifiConnected) {
+      Serial.println("📶 WiFi conectado");
+      logSystemEvent("WIFI_CONNECTED", "IP: " + WiFi.localIP().toString());
+    } else {
+      Serial.println("📵 WiFi desconectado");
+      logSystemEvent("WIFI_DISCONNECTED", "Señal perdida");
+    }
+  }
+
+  switch(currentConnectionMode) {
+    case MODE_DUAL_ETH_WIFI:
+      if (!ethernetConnected && !wifiConnected) {
+        Serial.println("⚠️ Ambas conexiones (Ethernet+WiFi) caídas");
+        if (!ethernetConnected && !wifiConnected) {
+          Serial.println("🔄 Intentando reconexión WiFi...");
+          setupWiFi();
+        }
+      }
+      break;
+  }
+}
+
+void switchConnectionMode(int newMode) {
+  if (newMode < MODE_ETHERNET || newMode > MODE_DUAL_ETH_WIFI) {
+    Serial.println("❌ Modo de conexión inválido");
+    return;
+  }
+
+  if (newMode == currentConnectionMode) {
+    Serial.println("ℹ️ Ya está en el modo de conexión seleccionado");
+    return;
+  }
+
+  Serial.print("🔄 Cambiando modo de conexión de ");
+  Serial.print(currentConnectionMode);
+  Serial.print(" a ");
+  Serial.println(newMode);
+
+  switch(currentConnectionMode) {
+    case MODE_WIFI:
+    case MODE_DUAL_ETH_WIFI:
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+      wifiConnected = false;
+      break;
+  }
+
+  deviceConfig.connectionMode = newMode;
+  currentConnectionMode = newMode;
+  saveConfiguration(); 
+
+  initializeConnectionModules();
+
+  Serial.println("✅ Modo de conexión cambiado exitosamente");
+  logSystemEvent("CONNECTION_MODE_CHANGED", "Nuevo modo: " + String(newMode));
+}
+
 

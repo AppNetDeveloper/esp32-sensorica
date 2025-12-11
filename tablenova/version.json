@@ -1,7 +1,0 @@
-{
-  "version": "1.0.0",
-  "url": "http://ota.boisolo.com/multi-sensor-iot/multi-sensor-iot-1.0.0.bin",
-  "checksum": "sha256:a1b2c3d4e5f6...",
-  "mandatory": false,
-  "release_notes": "Versión inicial del Multi-Sensor IoT Universal con soporte para 4 tipos de sensores: ultrasónico, 1 pulsador, 2 pulsadores y sensor de vibración. Incluye configuración web adaptable, modos bridge/hotspot y OTA con rollback."
-}

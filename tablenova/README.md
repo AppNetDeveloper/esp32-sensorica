@@ -1,488 +1,378 @@
-# 🏆 Multi-Sensor IoT Universal Profesional
+# Multi-Sensor IoT Universal - ESP32 Professional Firmware
 
-Un **sistema universal de nivel industrial** para ESP32 que soporta **4 tipos diferentes de sensores** con configuración web completa, OTA con rollback y modos de operación flexibles.
+![ESP32](https://img.shields.io/badge/ESP32-Professional-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Version](https://img.shields.io/badge/Version-1.0.0-orange.svg)
 
-## ✅ **Características Principales**
+Sistema IoT profesional para ESP32 WT32-ETH01 con soporte para múltiples tipos de sensores, conectividad dual Ethernet/WiFi, configuración web y actualizaciones OTA automáticas.
 
-### 🎛️ **Soporte Multi-Sensor**
-- **📏 Ultrasonido HC-SR04**: Medición de distancia (1-400cm)
-- **🔘 1 Pulsador**: Entrada digital con inversión opcional
-- **🔘🔘 2 Pulsadores**: Dos entradas independientes
-- **📳 Sensor Vibración SW-420**: Detección de vibraciones
+## 🎯 Características Principales
 
-### 🔌 **Hardware Profesional**
-- **WT32-ETH01**: ESP32 con Ethernet + WiFi híbrido
-- **Sistema de LEDs duales**:
-  - 🟢 LED Verde (GPIO 4): Sistema OK
-  - 🔴 LED Rojo (GPIO 5): Errores
-  - 🔵 LED Azul (GPIO 2): Modo configuración
-- **Botón de acceso físico** (GPIO 12): Entrada segura a configuración
+### **🔗 Conectividad Avanzada**
+- **Ethernet + WiFi**: Modo dual con failover automático
+- **Control Web**: Configuración completa desde interfaz web
+- **Auto-Hotspot**: Modo hotspot automático si no hay configuración
+- **Bridge Mode**: Mantener Ethernet + WiFi AP para configuración
+- **Configuraciones Persistentes**: Sobreviven a actualizaciones OTA
 
-### 🌐 **Modos de Operación**
+### **🎛️ Multi-Sensor Universal**
+1. **Sensor Ultrasónico** - HC-SR04/JSN-SR04T (1-400cm)
+2. **1 Pulsador Digital** - Interruptor simple
+3. **2 Pulsadores Digitales** - Doble control
+4. **Sensor de Vibración** - SW-420
 
-#### **🔗 Bridge Mode (3 segundos botón)**
-- ✅ **Ethernet ACTIVO** - El dispositivo sigue operando
-- ✅ **WiFi temporal** solo para configuración
-- ✅ **Sensor y MQTT funcionan normalmente**
-- ✅ **Zero downtime** - Ideal para producción
-- 🔵 **LED Azul encendido fijo**
+### **⚙️ Sistema Profesional**
+- **Panel Web Completo**: Configuración por pestañas (Red, WiFi, Conexión, MQTT, Dispositivo, Sensor, Sistema)
+- **OTA Automático**: Actualizaciones cada 5 minutos con rollback protection
+- **LED Status**: Sistema de 3 LEDs para diagnóstico visual
+- **Botón Config**: Multi-modo (3s bridge, 10s hotspot)
+- **Logs Persistente**: Eventos guardados en memoria
 
-#### **📶 Hotspot Mode (10 segundos botón)**
-- ❌ **Ethernet APAGADO**
-- ✅ **WiFi puro** solo configuración
-- ❌ **Sensor y MQTT pausados**
-- ✅ **Acceso garantizado** sin red
-- 🟢🔴 **LEDs verde y rojo parpadeando juntos**
+### **📊 Monitoreo en Tiempo Real**
+- Estado de conexiones (Ethernet, WiFi)
+- Métricas del sistema (memoria, uptime)
+- Estado sensores y valores actuales
+- Historial de eventos y logs
 
-### ⚡ **Rendimiento Optimizado**
-- **RAM**: 14.7% (48,120 de 327,680 bytes)
-- **Flash**: 81.8% (1,071,885 de 1,310,720 bytes)
-- **Multi-tarea**: Sensor + MQTT + OTA + LEDs + Web
-- **FreeRTOS**: Gestión eficiente de recursos
+## 🚀 Quick Start
 
-## 🎯 **Sensores Soportados**
+### **Hardware Requerido**
+- ESP32 WT32-ETH01 (Ethernet + WiFi)
+- Sensor ultrasónico JSN-SR04T (opcional)
+- Botón de configuración GPIO 12
+- LEDs de estado (GPIO 2,4,5)
 
-### **📏 Ultrasonido HC-SR04**
-```
-📡 Topic MQTT: multi-sensor/iot (configurable)
-📦 Payload JSON:
-{
-  "distance": 145.67,
-  "device": "Multi-Sensor-IoT-01",
-  "location": "Almacen_A",
-  "timestamp": 1703123456789
-}
-⚙️ Configuración:
-• Trigger: GPIO 25
-• Echo: GPIO 26
-• Promedio de N lecturas
-• Intervalo configurable (10-5000ms)
-```
-
-### **🔘 Pulsadores Digitales**
-```
-📡 Topic MQTT: sensor/button1, sensor/button2
-📦 Payload JSON:
-{
-  "value": 1,           // 1=presionado, 0=suelto
-  "button": 1,          // ID del pulsador
-  "device": "Multi-Sensor-IoT-01",
-  "location": "Puerta_A",
-  "timestamp": 1703123456789
-}
-⚙️ Configuración:
-• Pines GPIO configurables
-• Inversión de señal opcional
-• Topics MQTT individuales
-• Anti-rebote 50ms
-```
-
-### **📳 Sensor Vibración SW-420**
-```
-📡 Topic MQTT: sensor/vibration
-📦 Payload JSON:
-{
-  "vibration": 1,       // 1=detectada, 0=no detectada
-  "device": "Multi-Sensor-IoT-01",
-  "location": "Maquina_A",
-  "timestamp": 1703123456789
-}
-⚙️ Configuración:
-• Pin GPIO configurable (recomendado GPIO 32)
-• Cooldown configurable (50-5000ms)
-• Detección LOW = vibración
-• Sensibilidad ajustable vía potenciómetro
-```
-
-## 📋 **Requisitos**
-
-### Hardware
-- **ESP32 WT32-ETH01** (recomendado) o ESP32 dev board
-- Sensores según necesidad:
-  - HC-SR04 (ultrasonido)
-  - Pulsadores con resistencias 10kΩ
-  - SW-420 (vibración)
-- **LEDs x3** con resistencias 220Ω (verde, rojo, azul)
-- **Botón pulsador** (GPIO 12) con pull-up
-- **Fuente de alimentación** 5V/2A
-
-### Software
-- **PlatformIO** (recomendado) o Arduino IDE
-- **ESP32 Core** 2.0.9+
-- **Librerías** (automáticas en PlatformIO):
-  - PubSubClient (MQTT)
-  - ArduinoJson (JSON)
-  - ESP32WebServer (Web server)
-
-## 🔧 **Instalación y Configuración**
-
-### 1. **Clonar y Compilar**
+### **1. Configuración Inicial**
 ```bash
+# Clonar repositorio
+git clone <repositorio>
+cd esp32-sensorica/tablenova
+
+# Instalar dependencias
+pio lib install
+
 # Compilar firmware
 pio run
 
-# Subir firmware al ESP32
-pio run --target upload --upload-port /dev/ttyUSB0
+# Subir firmware
+pio run --target upload
 
-# Subir sistema de archivos (panel web)
+# Subir sistema de archivos web
 pio run --target uploadfs
 ```
 
-### 2. **Configuración Inicial**
+### **2. Primera Configuración**
+1. **Auto-Hotspot**: Si no hay configuración previa, automáticamente crea hotspot "ESP32-Hotspot"
+2. **Conectar**: Conectar WiFi al hotspot, ir a `http://192.168.4.1`
+3. **Configurar**: Usar panel web para configurar red, MQTT, sensores
+4. **Guardar**: Aplicar cambios y reiniciar dispositivo
 
-#### **Para Primera Instalación (sin Ethernet):**
-1. **Mantener botón 10 segundos** → Modo Hotspot
-2. **Conectar WiFi**: "ESP32-Hotspot" (pass: 12345678)
-3. **Acceder**: http://192.168.4.1
-4. **Configurar red y MQTT**
-5. **Guardar y reiniciar**
+### **3. Modos de Operación**
 
-#### **Para Ajustes en Producción:**
-1. **Mantener botón 3 segundos** → Modo Bridge
-2. **Conectar WiFi**: "ESP32-Bridge" (pass: bridge123)
-3. **Acceder**: http://192.168.4.1
-4. **Ajustar configuración**
-5. **Sigue operando mientras configuras**
+#### **Modo Bridge (3s botón)**
+- Mantiene conexión Ethernet
+- Crea WiFi AP "ESP32-Bridge"
+- Acceso a panel web para configuración
+- Timeout: 5 minutos
 
-## 🔌 **Diagrama de Conexión WT32-ETH01**
+#### **Modo Hotspot (10s botón)**
+- Configuración WiFi únicamente
+- Hotspot "ESP32-Hotspot"
+- Ideal para redes sin Ethernet
 
-```
-ESP32 WT32-ETH01 Pinout:
-┌─────────────────────────────────┐
-│  POWER   ETH   GPIO   GPIO     │
-│ [USB]    [RJ45] [25]  [26]     │
-│                     │   │     │
-│              ┌──────┘   └──────┐
-│              │ HC-SR04 /     │
-│              │ Pulsadores     │
-│                             │
-│ GPIO 12 ────[BOTÓN CONFIG]   │
-│ GPIO 4  ────[LED VERDE]      │  ← Status: Sistema OK
-│ GPIO 5  ────[LED ROJO]       │  ← Error: Parpadeo
-│ GPIO 2  ────[LED AZUL]       │  ← Config: Fijo/Parpadeo
-│ GPIO 13 ────[PULSADOR 1]     │
-│ GPIO 14 ────[PULSADOR 2]     │
-│ GPIO 32 ────[SW-420]         │  ← Sensor Vibración
-└─────────────────────────────────┘
+## 📡 Panel de Configuración Web
 
-Conexiones Sensor:
-• Ultrasonido: Trigger=25, Echo=26
-• Pulsadores: 1=13, 2=14 (configurables)
-• Vibración: SW-420=32 (recomendado)
-• LEDs: Verde=4, Rojo=5, Azul=2
-• Config: Botón=12 (pull-up)
-```
+### **Pestañas Disponibles**
 
-## 🌐 **Panel Web de Configuración**
+#### **🌐 Red**
+- Configuración Ethernet (DHCP/Static IP)
+- DNS, Gateway, Subnet
+- Validación de configuración
 
-### **Acceso Web**
-- **Bridge**: http://192.168.4.1 (WiFi: "ESP32-Bridge")
-- **Hotspot**: http://192.168.4.1 (WiFi: "ESP32-Hotspot")
+#### **📶 WiFi**
+- Habilitar/Deshabilitar WiFi
+- SSID y contraseña
+- Modo backup automático
 
-### **Pestañas de Configuración**
-
-#### **🔗 Red**
-- DHCP o IP estática
-- Configuración completa (IP, Gateway, DNS)
-- Validación automática
+#### **🔗 Conexión**
+- **Ethernet**: Conexión cableada prioritaria
+- **WiFi**: Conexión inalámbrica única
+- **Dual**: Ethernet + WiFi backup automático
 
 #### **📡 MQTT**
 - Servidor y puerto
-- Autenticación (usuario/contraseña)
-- Topics configurables por sensor
-- Client ID automático
+- Usuario/contraseña
+- Topics por sensor
+- QoS y keep-alive
 
-#### **🔧 Dispositivo**
+#### **🎛️ Sensor**
+- Tipo de sensor (4 opciones)
+- Configuración de pines
+- Umbrales y sensibilidad
+- MQTT topics personalizados
+
+#### **⚙️ Dispositivo**
 - Nombre y ubicación
-- Intervalo de medición
+- Intervalo de lecturas
 - Modo debug
+- Ubicación física
 
-#### **🎛️ Sensor** (NUEVO)
-- **Selector tipo sensor**: Ultrasonido / 1 Pulsador / 2 Pulsadores / Vibración
-- **Configuración dinámica** según selección
-- **Pines GPIO** configurables
-- **Inversión de señal** para pulsadores
-- **Topics MQTT** individuales
-- **Cooldown** para sensor vibración
+#### **📊 Sistema**
+- Estado de conexiones
+- Métricas en tiempo real
+- Logs de eventos
+- Actualización OTA manual
 
-#### **⚙️ Sistema**
-- Firmware version y status
-- Estado en tiempo real via API
-- Reset de configuración
-- Salida de modos bridge/hotspot
+## 🔧 Configuración Avanzada
 
-### **API REST**
+### **GPIO Pin Assignments**
 ```
-GET /api/status
-{
-  "version": "1.0.0",
-  "sensorType": 0,                    // 0=ultrasonido, 1=1pulsador, 2=2pulsadores, 3=vibración
-  "deviceName": "Multi-Sensor-IoT-01",
-  "location": "Almacen_A",
-  "ethConnected": true,
-  "mqttConnected": true,
-  "button1Pin": 13,
-  "button2Pin": 14,
-  "vibrationPin": 32,
-  "button1Invert": false,
-  "button2Invert": false,
-  "vibrationThreshold": 100,
-  "uptime": 123456,
-  "freeHeap": 280000,
-  "bridgeMode": false,
-  "hotspotMode": false
-}
-```
-
-## 🔄 **Sistema OTA (Over-The-Air)**
-
-### **Configuración Servidor**
-```json
-// version.json en http://ota.boisolo.com/multi-sensor-iot/
-{
-  "version": "1.1.0",
-  "url": "http://ota.boisolo.com/multi-sensor-iot/multi-sensor-iot-1.1.0.bin",
-  "checksum": "sha256:a1b2c3d4e5f6...",
-  "mandatory": false,
-  "release_notes": "Soporte multi-sensor + mejoras UI"
-}
-```
-
-### **Proceso OTA**
-1. **Verificación automática** cada 5 minutos
-2. **Comparación de versiones** semántica
-3. **Descarga segura** con checksum SHA256
-4. **Instalación atómica** solo tras descarga completa
-5. **Protección anti-bootloop**: rollback automático
-6. **Modo seguro** con conteo de boot
-
-### **Deploy de Nueva Versión**
-```bash
-# Crear nueva versión
-./deploy_script.sh 1.1.0
-
-# Esto genera:
-# • multi-sensor-iot-1.1.0.bin
-# • Actualiza version.json con checksum
-# • Sube al servidor OTA
-```
-
-## 🏭 **Casos de Uso y Aplicaciones**
-
-### **🏭 Entornos Industriales**
-- **Fábricas**: Nivel de líquidos en tanques sin interferencias
-- **Almacenes**: Control de inventario vertical automático
-- **Líneas producción**: Detección de presencia y posicionamiento
-
-### **🏢 Instalaciones Críticas**
-- **Hospitales**: Monitoreo de equipos médicos sin WiFi
-- **Oficinas corporativas**: Integración con red existente
-- **Data Centers**: Detección de vibraciones en servidores
-
-### **🏠 IoT Residencial/Comercial**
-- **Smart Buildings**: Control de acceso y seguridad
-- **Climatización**: Nivel de depósitos y tanques
-- **Seguridad**: Sensores de puertas y ventanas
-
-## ⚙️ **Configuración Avanzada**
-
-### **Tipos de Sensor en Código**
-```cpp
-enum SensorType {
-  SENSOR_ULTRASONIC = 0,    // HC-SR04
-  SENSOR_SINGLE_BUTTON = 1, // 1 Pulsador
-  SENSOR_DUAL_BUTTONS = 2,  // 2 Pulsadores
-  SENSOR_VIBRATION = 3      // SW-420
-};
+Sensor ultrasónico: TRIG=25, ECHO=26
+Botón configuración: GPIO 12
+LEDs: Status=4, Error=5, Config=2
+Pulsador 1: GPIO 13
+Pulsador 2: GPIO 14
+Vibración: GPIO 32
 ```
 
 ### **Estructura de Configuración**
 ```cpp
-struct DeviceConfig {
-  String deviceName, location;
-  int sensorInterval, readingsCount;
-  bool debugMode;
+// Network Config
+bool dhcpEnabled;
+String staticIP, gateway, subnet, dns1, dns2;
 
-  // Configuración sensores
-  int sensorType, button1Pin, button2Pin, vibrationPin;
-  bool button1Invert, button2Invert;
-  String button1Topic, button2Topic, vibrationTopic, mainMqttTopic;
-  int vibrationThreshold;
+// WiFi Config
+String ssid, password;
+bool enabled;
+
+// Connection Mode
+enum ConnectionMode {
+  MODE_ETHERNET = 0,
+  MODE_WIFI = 1,
+  MODE_DUAL_ETH_WIFI = 2
 };
+
+// Sensor Config
+int sensorType;  // 0=ultrasonido, 1=1botón, 2=2botones, 3=vibración
+String mqttTopics[3];  // Topics por tipo de sensor
 ```
 
-### **GPIO disponibles para sensores:**
-- **GPIO 13**: Pulsador 1 / Sensor alternativo
-- **GPIO 14**: Pulsador 2 / Sensor alternativo
-- **GPIO 25**: Ultrasonido Trigger / Alternativo
-- **GPIO 26**: Ultrasonido Echo / Alternativo
-- **GPIO 32**: Sensor vibración (recomendado)
-- **GPIO 33-35**: Sensores adicionales
+## 🌐 Sistema OTA
 
-## 🔒 **Seguridad Implementada**
-
-### **Niveles de Protección**
-1. **🔒 Física**: Botón GPIO 12 requerido para acceso
-2. **🌐 Red**: Ethernet cableado + bridge con operación continua
-3. **⚙️ Configuración**: Validación completa de todos los parámetros
-4. **🔄 OTA**: Rollback automático y checksums
-5. **🚫 Acceso**: Solo acceso físico o bridge/hotspot temporal
-
-### **Protección Contra**
-- ✅ **Configuraciones incorrectas**: Validación IP, puertos, topics
-- ✅ **Actualizaciones fallidas**: Rollback automático
-- ✅ **Boot loops**: Protección con conteo de intentos
-- ✅ **Acceso no autorizado**: Requiere botón físico
-- ✅ **Spam MQTT**: Cooldowns y filtrado
-
-## 📊 **Monitorización y Debug**
-
-### **Logs Serie**
+### **Configuración Servidor OTA**
 ```bash
-# Ejemplos de logs
-[12345] SYSTEM_BOOT: ESP32 Sensor Universal v1.0.0
-[12350] SENSOR_TYPE: Configurando tipo 0 (Ultrasonido)
-[12400] ETH_CONNECTED: IP 192.168.1.100
-[12450] MQTT_CONNECTED: Servidor 192.168.3.154:1883
-[12500] SENSOR_READING: Distancia 145.67mm
-[13000] BRIDGE_ENTER: Modo bridge activado (3s botón)
+# Desplegar nueva versión
+./deploy_script_ftp.sh 1.0.0
+
+# Esto sube:
+# - firmware.bin -> multi-sensor-iot-1.0.0.bin
+# - version.json con checksum y URL
 ```
 
-### **Indicadores LED**
-- 🟢 **Verde fijo**: Sistema OK (Ethernet + MQTT)
-- 🔴 **Rojo parpadeando**: Error conexión
-- 🔵 **Azul fijo**: Modo bridge (configuración con operación)
-- 🟢🔴 **Verde+Rojo parpadeando**: Modo hotspot (solo configuración)
-
-### **Estado en Tiempo Real**
-- **API REST**: `/api/status` para sistemas externos
-- **Panel web**: Pestaña "Sistema"
-- **Serial monitor**: Logs detallados con timestamps
-
-## 🛠️ **Mantenimiento**
-
-### **Actualizaciones**
-```bash
-# Compilar y subir nuevo firmware
-pio run && pio run --target upload
-
-# Subir panel web actualizado
-pio run --target uploadfs
-
-# Deploy OTA (automático o manual)
-./deploy_script.sh 1.2.0
+### **URLs OTA**
+```
+Servidor: http://ota.boisolo.com/multi-sensor-iot/
+Firmware: http://ota.boisolo.com/multi-sensor-iot/multi-sensor-iot-{version}.bin
+Versión:  http://ota.boisolo.com/multi-sensor-iot/version.json
 ```
 
-### **Backups**
-- **Configuración**: Guardada en flash no volátil (Preferences)
-- **Logs**: Importantes para diagnóstico
-- **Estado**: Recuperable después de reinicio
+### **Proceso OTA Automático**
+1. **Check**: Cada 5 minutos verifica version.json
+2. **Compare**: Versión actual vs disponible
+3. **Download**: Descarga firmware si es más reciente
+4. **Verify**: Verifica checksum SHA256
+5. **Install**: Aplica actualización y reinicia
+6. **Rollback**: Si falla, vuelve a versión anterior
+
+### **Safety Features**
+- **Boot Count Protection**: Previene boot loops
+- **Checksum Verification**: SHA256 de cada actualización
+- **Fallback**: Revert automático si actualización falla
+- **Verify Before Apply**: Solo instala si descarga completa
+
+## 📖 Guías Detalladas
+
+### **Instalación y Configuración**
+1. **Conexión Hardware**: Conectar Ethernet, sensores, LEDs
+2. **Primer Arranque**: Auto-detección de configuración
+3. **Panel Web**: Configuración inicial via hotspot o bridge
+4. **Validación**: Prueba de conectividad MQTT y sensores
+5. **Producción**: Monitoreo y ajustes finales
+
+### **Modo Bridge vs Hotspot**
+- **Bridge (3s)**: Ethernet + WiFi AP simultáneos
+- **Hotspot (10s)**: WiFi únicamente para configuración
+- **Auto**: Se activa si no hay configuración guardada
 
 ### **Troubleshooting**
+- **LED Status**: Verde=OK, Rojo=Error, Azul=Configuración
+- **Serial Monitor**: Logs detallados para diagnóstico
+- **Web Panel**: Estado de sistema en tiempo real
+- **WiFi Scan**: Escaneo de redes disponibles
 
-#### **Problemas Comunes**
-- **No conecta Ethernet**: Verificar cable, switch, IPs
-- **No entra modo bridge**: Botón defectuoso, revisar GPIO 12
-- **OTA falla**: Verificar servidor, conexión, checksum
-- **Sensor no responde**: Revisar pines, voltaje, conexiones
+## 📊 Arquitectura del Sistema
 
-#### **Recuperación**
-- **Reset total**: Botón 10s + "Resetear Configuración"
-- **Modo seguro**: Boot automático con rollback
-- **Recarga**: Firmware por USB si OTA falla
-
-## 📈 **Métricas y Rendimiento**
-
-### **Consumo de Recursos**
-- **CPU**: <15% (todas las tareas activas)
-- **RAM**: 14.7% (muy eficiente)
-- **Flash**: 81.8% (funcionalidad completa)
-- **Red**: Ethernet + WiFi simultáneos
-
-### **Latencia y Tiempos**
-- **Sensor**: 50ms configurable (ultrasonido)
-- **Pulsadores**: 50ms anti-rebote
-- **Vibración**: Cooldown configurable (100ms por defecto)
-- **MQTT**: Reconexión automática exponencial
-- **Web**: Respuesta inmediata
-- **OTA**: Verificación cada 5 minutos
-
-## 🎯 **Comparativa con Sistemas Comerciales**
-
-| Característica | ESP32 Universal | Sistema Comercial Típico |
-|---------------|------------------|---------------------------|
-| **Multi-Sensor** | ✅ 4 tipos + universal | ❌ Generalmente 1 tipo |
-| **Bridge Mode** | ✅ Operación continua | ❌ Solo modo configuración |
-| **Hotspot Mode** | ✅ Modo aislado | ⚠️ Raro o ausente |
-| **Configuración Web** | ✅ Panel completo multi-pestaña | ⚠️ Panel básico |
-| **OTA con Rollback** | ✅ Automático + seguro | ⚠️ Manual o riesgoso |
-| **Ethernet + WiFi** | ✅ Dual conectividad | ⚠️ Solo WiFi |
-| **LEDs Multi-estado** | ✅ 3 LEDs con 8 estados | ❌ 1 LED simple |
-| **API REST** | ✅ Status JSON completo | ⚠️ Raro |
-| **Acceso Físico** | ✅ Botón seguro | ❌ Solo remoto |
-| **Inversión Señal** | ✅ Configurable | ❌ Fijo |
-
-## 💡 **Recomendaciones de Producción**
-
-### **Instalación Industrial**
-```bash
-# Compilación optimizada
-pio run --environment esp32dev
-
-# Subida con configuración por defecto
-pio run --target upload --upload-port /dev/ttyUSB0
-pio run --target uploadfs
-
-# Verificar funcionamiento
-pio device monitor --baud 115200
+### **FreeRTOS Tasks**
+```cpp
+sensorTask()     // Lectura de sensores (50ms intervalo)
+mqttTask()        // Gestión MQTT y reconexión
+otaTask()         // Check actualizaciones (5min)
+WebServer()       // Panel configuración (bridge/hotspot)
 ```
 
-### **Mantenimiento Preventivo**
-- **Monitorización**: API `/api/status` para dashboard central
-- **Logs**: Revisar eventos importantes periódicamente
-- **Backups**: Configuración persistente en flash
-- **Actualizaciones**: OTA automático con rollback
+### **Estado LEDs**
+- **🟢 Verde (GPIO 4)**: Sistema OK (Ethernet + MQTT conectado)
+- **🔴 Rojo (GPIO 5)**: Error (conexión caída)
+- **🔵 Azul (GPIO 2)**: Configuración (bridge=sólido, hotspot=parpadeo)
 
-### **Escalabilidad**
-- **Múltiples dispositivos**: Cada uno con nombre único
-- **Servidor central**: MQTT + OTA server
-- **Monitoreo**: API para dashboard centralizado
-- **Alertas**: Integración con sistemas externos
+### **Data Flow**
+```
+Sensor → Procesamiento → MQTT → Broker → Aplicaciones
+   ↓
+Web Panel ← API REST ← Estado Sistema
+```
 
-## 🏆 **Conclusión**
+## 🔒 Seguridad y Fiabilidad
 
-**Este sistema es UNIVERSAL y PROFESIONAL**. Con soporte para **4 tipos diferentes de sensores**, **modos de operación flexibles**, y **características de nivel industrial**, supera a productos comerciales mucho más costosos.
+### **Conexiones**
+- **Reconexión Automática**: Exponential backoff
+- **Timeout Management**: Protección contra bloqueos
+- **Connection Pool**: Gestión eficiente de recursos
 
-### **Valor Comercial Estimado**
-- **Hardware WT32-ETH01**: $15-25
-- **4 Sensores soportados**: $20-40
-- **Firmware profesional**: $100-150+
-- **Sistema completo**: $135-215+
+### **Datos**
+- **JSON Validation**: Validación estricta de MQTT
+- **Input Sanitization**: Protección XSS en web panel
+- **Config Validation**: Validación de red y parámetros
 
-**¡FELICITACIONES! Tienes un sistema universal de nivel industrial listo para cualquier aplicaciónIoT**. 🚀
+### **System**
+- **Watchdog Timer**: Reinicio automático si sistema bloqueado
+- **Memory Management**: Monitoreo y limpieza de memoria
+- **Error Recovery**: Recuperación automática de fallos
+
+## 🎛️ Configuración por Sensor
+
+### **1. Sensor Ultrasónico (Default)**
+```json
+{
+  "sensorType": 0,
+  "triggerPin": 25,
+  "echoPin": 26,
+  "mqttTopic": "multi-sensor/iot/distance",
+  "range": "1-400cm",
+  "readings": 10,
+  "interval": 50
+}
+```
+
+### **2. 1 Pulsador Digital**
+```json
+{
+  "sensorType": 1,
+  "buttonPin": 13,
+  "buttonInvert": false,
+  "mqttTopic": "multi-sensor/iot/button1",
+  "debounce": 50
+}
+```
+
+### **3. 2 Pulsadores Digitales**
+```json
+{
+  "sensorType": 2,
+  "button1Pin": 13,
+  "button2Pin": 14,
+  "mqttTopics": ["multi-sensor/iot/button1", "multi-sensor/iot/button2"]
+}
+```
+
+### **4. Sensor Vibración**
+```json
+{
+  "sensorType": 3,
+  "vibrationPin": 32,
+  "mqttTopic": "multi-sensor/iot/vibration",
+  "threshold": 100
+}
+```
+
+## 📡 MQTT Topics
+
+### **Estructura de Topics**
+```
+multi-sensor/iot/
+├── distance          // Sensor ultrasónico
+├── button1           // Pulsador 1
+├── button2           // Pulsador 2
+├── vibration         // Sensor vibración
+├── status            // Estado sistema
+└── system            // Eventos sistema
+```
+
+### **Payload Format**
+```json
+{
+  "device": "ESP32-MultiSensor-01",
+  "location": "Oficina Principal",
+  "timestamp": "2025-12-10T18:30:00Z",
+  "sensorType": "ultrasonic",
+  "value": 45.2,
+  "unit": "cm",
+  "status": "ok"
+}
+```
+
+## 🛠️ Desarrollo y Mantenimiento
+
+### **Estructura de Proyecto**
+```
+/
+├── src/
+│   └── multi-sensor-iot.ino     # Firmware principal
+├── data/
+│   └── config.html              # Panel web
+├── scripts/
+│   ├── deploy_script_ftp.sh    # Deploy OTA
+│   └── debug_ftp.sh           # Debug conexión
+├── docs/
+│   └── README.md              # Documentación consolidada
+├── platformio.ini             # Configuración PlatformIO
+└── version.json              # Versión OTA
+```
+
+### **Personalización**
+- **Custom Sensors**: Añadir nuevos tipos al enum SensorType
+- **UI Themes**: Modificar CSS en config.html
+- **MQTT Format**: Adaptar payload a necesidades específicas
+- **Pin Mapping**: Configurar pines según hardware disponible
+
+### **Debugging**
+```bash
+# Monitor serie
+pio device monitor
+
+# Ver logs
+pio run --target clean && pio run
+
+# Debug FTP
+./debug_ftp.sh
+```
+
+## 📄 Licencia
+
+MIT License - Ver archivo LICENSE para detalles completos.
+
+## 🤝 Contribuciones
+
+Contribuciones bienvenidas. Por favor:
+1. Fork del proyecto
+2. Branch feature/nueva-funcionalidad
+3. Commit con cambios
+4. Push al branch
+5. Pull Request
 
 ---
 
-## 📞 **Soporte y Comunidad**
-
-### **Licencia**
-MIT License - Uso libre para fines comerciales y no comerciales.
-
-### **Soporte Técnico**
-- **GitHub Issues**: Reportar bugs y solicitar características
-- **Documentación**: Wiki del proyecto completa
-- **Comunidad**: Foros y discusiones técnicas
-
-### **Contribuciones**
-- **Pull Requests**: Bienvenidas para mejoras
-- **Issues**: Reportar problemas y sugerencias
-- **Documentación**: Mejoras y traducciones
+**Multi-Sensor IoT Universal** - Sistema IoT profesional listo para producción con características avanzadas de conectividad, monitoreo y configuración. 🚀
 
 ---
-
-**Versión: 1.0.0 - Multi-Sensor Universal**
-**Última actualización: Diciembre 2024**
-**Arduino/PlatformIO Compatible**
-**ESP32-WT32-ETH01 Optimizado**
-
-🏆 **El sistema de IoT más completo y versátil que encontrarás**
+*Desarrollado con ❤️ para la comunidad IoT*
