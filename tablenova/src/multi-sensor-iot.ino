@@ -293,9 +293,9 @@ void setup() {
   delay(500); // Pequeña pausa para que el monitor serie se estabilice
   Serial.println("\n\n--- INICIANDO MULTI-SENSOR IOT UNIVERSAL (WT32-ETH01) ---");
 
-  // RESET COMPLETO DE VARIABLES OTA (v1.6.1) - Forzar actualización sin backoff
+  // RESET COMPLETO DE VARIABLES OTA (v1.6.6) - Forzar actualización sin backoff
   // IMPORTANTE: Las variables se resetean en otaTask() para evitar problemas de declaración
-  Serial.println("🔄 [RESET OTA] Las variables OTA se resetearán en otaTask() - v1.6.1");
+  Serial.println("🔄 [RESET OTA] Las variables OTA se resetearán en otaTask() - v1.6.6");
   Serial.println("🔄 [RESET OTA] Backoff será eliminado - verificará inmediatamente");
 
   sensorMutex = xSemaphoreCreateMutex();
@@ -552,10 +552,21 @@ void readButtons() {
 
 void readVibrationSensor() {
   if (deviceConfig.sensorType == SENSOR_VIBRATION) {
+    // SENSOR DIGITAL SW-420 - Lectura digital (compatible con cualquier GPIO)
+    pinMode(deviceConfig.vibrationPin, INPUT_PULLUP); // Asegurar pull-up
     bool currentVibrationState = digitalRead(deviceConfig.vibrationPin);
 
     // Detectar vibración (LOW = vibración detectada en SW-420)
     bool vibrationDetected = (currentVibrationState == LOW);
+
+    // LOG SIEMPRE VISIBLE: Mostrar estado del sensor SW-420
+    static unsigned long lastDebugLog = 0;
+    if (millis() - lastDebugLog > 5000) { // Cada 5 segundos
+      lastDebugLog = millis();
+      Serial.println("📳 [VIBRATION] Sensor SW-420 en GPIO " + String(deviceConfig.vibrationPin) +
+                     " - Estado: " + (currentVibrationState == LOW ? "¡VIBRANDO!" : "Sin vibración") +
+                     " - Cooldown: " + String(deviceConfig.vibrationThreshold) + "ms");
+    }
 
     // Aplicar cooldown para evitar múltiples detecciones rápidas
     if (vibrationDetected && millis() - lastVibrationChange > deviceConfig.vibrationThreshold) {
@@ -565,12 +576,14 @@ void readVibrationSensor() {
       // Publicar detección de vibración
       publishVibrationState(true);
 
-      if (deviceConfig.debugMode) {
-        Serial.println("DEBUG > ¡VIBRACIÓN DETECTADA!");
-      }
+      // LOG DE DETECCIÓN (siempre visible)
+      Serial.println("📳 [VIBRATION] ¡VIBRACIÓN DETECTADA! - Publicando a MQTT...");
+      Serial.println("📳 [VIBRATION] Topic: " + deviceConfig.vibrationTopic);
+
     } else if (!vibrationDetected && vibrationState) {
       // Resetear estado cuando no hay vibración
       vibrationState = false;
+      Serial.println("📳 [VIBRATION] Vibración finalizada");
     }
   }
 }
@@ -813,17 +826,17 @@ String pendingOtaUrl = "";      // Nueva: URL del firmware pendiente
 String pendingOtaChecksum = ""; // Nueva: Checksum del firmware pendiente
 
 void otaTask(void *pvParameters) {
-  // RESET COMPLETO DE VARIABLES OTA (v1.6.1) - Forzar actualización sin backoff
+  // RESET COMPLETO DE VARIABLES OTA (v1.6.6) - Forzar actualización sin backoff
   otaInProgress = false;
   lastOTAAttempt = 0;  // IMPORTANTE: Resetear a 0 para evitar backoff
   otaFailureCount = 0; // IMPORTANTE: Resetear a 0 para evitar backoff
   otaUpdatePending = false;
   pendingOtaUrl = "";
   pendingOtaChecksum = "";
-  Serial.println("🔄 [RESET OTA] Variables OTA reseteadas completamente - v1.6.1");
+  Serial.println("🔄 [RESET OTA] Variables OTA reseteadas completamente - v1.6.6");
   Serial.println("🔄 [RESET OTA] Backoff desactivado - verificará inmediatamente");
   Serial.println("=================================================");
-  Serial.println("🚀 OTA > INICIANDO SISTEMA DE ACTUALIZACIONES v1.6.1 [SIN BACKOFF]");
+  Serial.println("🚀 OTA > INICIANDO SISTEMA DE ACTUALIZACIONES v1.6.6 [SIN BACKOFF]");
   Serial.println("📊 OTA > Intervalo de verificación: " + String(ota_check_interval/1000) + " segundos");
   Serial.println("⏱️  OTA > Timeout de descarga: " + String(ota_timeout/1000) + " segundos");
   Serial.println("🔒 OTA > Modo seguro con reintentos exponenciales activado");
@@ -960,14 +973,14 @@ bool performOTAUpdate(const FirmwareInfo& firmwareInfo) {
   Serial.println(firmwareInfo.url);
 
   // Detener tareas críticas pero mantener MQTT activo para reportar estado
-  // vTaskSuspendAll(); // Comentado para evitar crash FreeRTOS (v1.6.1)
+  // vTaskSuspendAll(); // Comentado para evitar crash FreeRTOS (v1.6.6)
 
   HTTPClient http;
   http.setTimeout(ota_timeout);
 
   if (!http.begin(firmwareInfo.url)) {
     Serial.println("OTA > No se pudo conectar al servidor de firmware");
-    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.1)
+    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.6)
     return false;
   }
 
@@ -1002,7 +1015,7 @@ bool performOTAUpdate(const FirmwareInfo& firmwareInfo) {
 
   // Si la actualización falló, reanudar tareas
   if (!success) {
-    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.1)
+    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.6)
     Serial.println("OTA > Actualización fallida, reanudando operaciones normales");
   }
 
@@ -1023,7 +1036,7 @@ bool performSafeOTAUpdate(const FirmwareInfo& firmwareInfo) {
   bool success = false;
 
   try {
-    // ACTUALIZACIÓN DIRECTA CON HTTPUpdate (v1.6.1) - Sin banderas pendientes
+    // ACTUALIZACIÓN DIRECTA CON HTTPUpdate (v1.6.6) - Sin banderas pendientes
     Serial.println("OTA > Ejecutando actualización directa con HTTPUpdate...");
     Serial.printf("OTA > Memoria libre antes de actualizar: %d bytes\n", ESP.getFreeHeap());
 
@@ -1041,7 +1054,7 @@ bool performSafeOTAUpdate(const FirmwareInfo& firmwareInfo) {
       delay(500); // Esperar a que se detenga completamente
     }
 
-    // ACTUALIZACIÓN DIRECTA con Update (método ESP32 nativo) - v1.6.1
+    // ACTUALIZACIÓN DIRECTA con Update (método ESP32 nativo) - v1.6.6
     Serial.println("OTA > 🔄 Iniciando actualización directa con Update...");
 
     // Crear HTTPClient para descarga
@@ -1092,7 +1105,7 @@ bool performSafeOTAUpdate(const FirmwareInfo& firmwareInfo) {
     }
 
     // Configurar headers
-    http.addHeader("User-Agent", "ESP32-OTA-Client/v1.6.1");
+    http.addHeader("User-Agent", "ESP32-OTA-Client/v1.6.6");
 
     // Descargar y escribir firmware
     Serial.println("OTA > 🔄 Escribiendo firmware en partición OTA...");
@@ -1147,7 +1160,7 @@ bool checkForUpdatesSafe() {
     return false;
   }
 
-  // FORZAR VERIFICACIÓN INMEDIATA - SIN BACKOFF (v1.6.1)
+  // FORZAR VERIFICACIÓN INMEDIATA - SIN BACKOFF (v1.6.6)
   unsigned long now = millis();
   otaInProgress = true;
   lastOTAAttempt = now;
@@ -1257,8 +1270,8 @@ bool checkForUpdatesSafe() {
     } else {
       Serial.println("🔍 [DEBUG] Firmware actualizado, no se necesita actualización");
       otaFailureCount = 0; // Resetear contador de fallos
-    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.1) en éxito
-      lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.1)
+    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.6) en éxito
+      lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.6)
       success = false;
     }
 
@@ -1274,7 +1287,7 @@ cleanup:
   if (success) {
     Serial.println("OTA > Actualización completada exitosamente");
     otaFailureCount = 0; // Resetear contador de fallos
-    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.1)
+    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.6)
 
     // Esperar un momento antes de reiniciar
     vTaskDelay(2000 / portTICK_PERIOD_MS);
