@@ -293,9 +293,9 @@ void setup() {
   delay(500); // Pequeña pausa para que el monitor serie se estabilice
   Serial.println("\n\n--- INICIANDO MULTI-SENSOR IOT UNIVERSAL (WT32-ETH01) ---");
 
-  // RESET COMPLETO DE VARIABLES OTA (v1.6.6) - Forzar actualización sin backoff
+  // RESET COMPLETO DE VARIABLES OTA (v1.6.8) - Forzar actualización sin backoff
   // IMPORTANTE: Las variables se resetean en otaTask() para evitar problemas de declaración
-  Serial.println("🔄 [RESET OTA] Las variables OTA se resetearán en otaTask() - v1.6.6");
+  Serial.println("🔄 [RESET OTA] Las variables OTA se resetearán en otaTask() - v1.6.8");
   Serial.println("🔄 [RESET OTA] Backoff será eliminado - verificará inmediatamente");
 
   sensorMutex = xSemaphoreCreateMutex();
@@ -690,9 +690,12 @@ void mqttTask(void *pvParameters) {
   Serial.println("🔄 MQTT Task iniciada");
 
   for (;;) {
-    // Verificar WiFi primero
-    if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("❌ MQTT: WiFi no conectado, esperando...");
+    // Verificar conexión de red (Ethernet O WiFi)
+    bool networkConnected = (eth_connected || WiFi.status() == WL_CONNECTED);
+
+    if (!networkConnected) {
+      Serial.println("❌ MQTT: Sin conexión de red (Ethernet: " + String(eth_connected ? "✅" : "❌") +
+                     ", WiFi: " + String(WiFi.status() == WL_CONNECTED ? "✅" : "❌") + "), esperando...");
       vTaskDelay(1000 / portTICK_PERIOD_MS);
       continue;
     }
@@ -826,17 +829,17 @@ String pendingOtaUrl = "";      // Nueva: URL del firmware pendiente
 String pendingOtaChecksum = ""; // Nueva: Checksum del firmware pendiente
 
 void otaTask(void *pvParameters) {
-  // RESET COMPLETO DE VARIABLES OTA (v1.6.6) - Forzar actualización sin backoff
+  // RESET COMPLETO DE VARIABLES OTA (v1.6.8) - Forzar actualización sin backoff
   otaInProgress = false;
   lastOTAAttempt = 0;  // IMPORTANTE: Resetear a 0 para evitar backoff
   otaFailureCount = 0; // IMPORTANTE: Resetear a 0 para evitar backoff
   otaUpdatePending = false;
   pendingOtaUrl = "";
   pendingOtaChecksum = "";
-  Serial.println("🔄 [RESET OTA] Variables OTA reseteadas completamente - v1.6.6");
+  Serial.println("🔄 [RESET OTA] Variables OTA reseteadas completamente - v1.6.8");
   Serial.println("🔄 [RESET OTA] Backoff desactivado - verificará inmediatamente");
   Serial.println("=================================================");
-  Serial.println("🚀 OTA > INICIANDO SISTEMA DE ACTUALIZACIONES v1.6.6 [SIN BACKOFF]");
+  Serial.println("🚀 OTA > INICIANDO SISTEMA DE ACTUALIZACIONES v1.6.8 [SIN BACKOFF]");
   Serial.println("📊 OTA > Intervalo de verificación: " + String(ota_check_interval/1000) + " segundos");
   Serial.println("⏱️  OTA > Timeout de descarga: " + String(ota_timeout/1000) + " segundos");
   Serial.println("🔒 OTA > Modo seguro con reintentos exponenciales activado");
@@ -973,14 +976,14 @@ bool performOTAUpdate(const FirmwareInfo& firmwareInfo) {
   Serial.println(firmwareInfo.url);
 
   // Detener tareas críticas pero mantener MQTT activo para reportar estado
-  // vTaskSuspendAll(); // Comentado para evitar crash FreeRTOS (v1.6.6)
+  // vTaskSuspendAll(); // Comentado para evitar crash FreeRTOS (v1.6.8)
 
   HTTPClient http;
   http.setTimeout(ota_timeout);
 
   if (!http.begin(firmwareInfo.url)) {
     Serial.println("OTA > No se pudo conectar al servidor de firmware");
-    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.6)
+    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.8)
     return false;
   }
 
@@ -1015,7 +1018,7 @@ bool performOTAUpdate(const FirmwareInfo& firmwareInfo) {
 
   // Si la actualización falló, reanudar tareas
   if (!success) {
-    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.6)
+    // xTaskResumeAll(); // Comentado para evitar crash FreeRTOS (v1.6.8)
     Serial.println("OTA > Actualización fallida, reanudando operaciones normales");
   }
 
@@ -1036,7 +1039,7 @@ bool performSafeOTAUpdate(const FirmwareInfo& firmwareInfo) {
   bool success = false;
 
   try {
-    // ACTUALIZACIÓN DIRECTA CON HTTPUpdate (v1.6.6) - Sin banderas pendientes
+    // ACTUALIZACIÓN DIRECTA CON HTTPUpdate (v1.6.8) - Sin banderas pendientes
     Serial.println("OTA > Ejecutando actualización directa con HTTPUpdate...");
     Serial.printf("OTA > Memoria libre antes de actualizar: %d bytes\n", ESP.getFreeHeap());
 
@@ -1054,7 +1057,7 @@ bool performSafeOTAUpdate(const FirmwareInfo& firmwareInfo) {
       delay(500); // Esperar a que se detenga completamente
     }
 
-    // ACTUALIZACIÓN DIRECTA con Update (método ESP32 nativo) - v1.6.6
+    // ACTUALIZACIÓN DIRECTA con Update (método ESP32 nativo) - v1.6.8
     Serial.println("OTA > 🔄 Iniciando actualización directa con Update...");
 
     // Crear HTTPClient para descarga
@@ -1105,7 +1108,7 @@ bool performSafeOTAUpdate(const FirmwareInfo& firmwareInfo) {
     }
 
     // Configurar headers
-    http.addHeader("User-Agent", "ESP32-OTA-Client/v1.6.6");
+    http.addHeader("User-Agent", "ESP32-OTA-Client/v1.6.8");
 
     // Descargar y escribir firmware
     Serial.println("OTA > 🔄 Escribiendo firmware en partición OTA...");
@@ -1160,7 +1163,7 @@ bool checkForUpdatesSafe() {
     return false;
   }
 
-  // FORZAR VERIFICACIÓN INMEDIATA - SIN BACKOFF (v1.6.6)
+  // FORZAR VERIFICACIÓN INMEDIATA - SIN BACKOFF (v1.6.8)
   unsigned long now = millis();
   otaInProgress = true;
   lastOTAAttempt = now;
@@ -1270,8 +1273,8 @@ bool checkForUpdatesSafe() {
     } else {
       Serial.println("🔍 [DEBUG] Firmware actualizado, no se necesita actualización");
       otaFailureCount = 0; // Resetear contador de fallos
-    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.6) en éxito
-      lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.6)
+    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.8) en éxito
+      lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.8)
       success = false;
     }
 
@@ -1287,7 +1290,7 @@ cleanup:
   if (success) {
     Serial.println("OTA > Actualización completada exitosamente");
     otaFailureCount = 0; // Resetear contador de fallos
-    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.6)
+    lastOTAAttempt = 0; // Resetear timestamp para evitar backoff falso (v1.6.8)
 
     // Esperar un momento antes de reiniciar
     vTaskDelay(2000 / portTICK_PERIOD_MS);
