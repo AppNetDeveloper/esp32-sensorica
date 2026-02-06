@@ -553,38 +553,35 @@ void readButtons() {
 void readVibrationSensor() {
   if (deviceConfig.sensorType == SENSOR_VIBRATION) {
     // SENSOR DIGITAL SW-420 - Lectura digital (compatible con cualquier GPIO)
-    pinMode(deviceConfig.vibrationPin, INPUT_PULLUP); // Asegurar pull-up
-    bool currentVibrationState = digitalRead(deviceConfig.vibrationPin);
+    static unsigned long lastVibrationPublish = 0;  // Última vez que se publicó
+    static bool lastVibrationState = HIGH;           // Estado anterior del pin
 
-    // Detectar vibración (LOW = vibración detectada en SW-420)
-    bool vibrationDetected = (currentVibrationState == LOW);
+    pinMode(deviceConfig.vibrationPin, INPUT_PULLUP);
+    bool currentPinState = digitalRead(deviceConfig.vibrationPin);
 
-    // LOG SIEMPRE VISIBLE: Mostrar estado del sensor SW-420
-    static unsigned long lastDebugLog = 0;
-    if (millis() - lastDebugLog > 5000) { // Cada 5 segundos
-      lastDebugLog = millis();
-      Serial.println("📳 [VIBRATION] Sensor SW-420 en GPIO " + String(deviceConfig.vibrationPin) +
-                     " - Estado: " + (currentVibrationState == LOW ? "¡VIBRANDO!" : "Sin vibración") +
-                     " - Cooldown: " + String(deviceConfig.vibrationThreshold) + "ms");
+    // Detectar flanco de HIGH a LOW (inicio de vibración)
+    if (currentPinState == LOW && lastVibrationState == HIGH) {
+      // Solo publicar si ha pasado el cooldown desde la última publicación
+      if (millis() - lastVibrationPublish > deviceConfig.vibrationThreshold) {
+        lastVibrationPublish = millis();
+        vibrationState = true;
+
+        // Publicar detección de vibración
+        publishVibrationState(true);
+
+        // LOG DE DETECCIÓN
+        Serial.println("📳 [VIBRATION] ¡VIBRACIÓN DETECTADA! - Publicando a MQTT...");
+        Serial.println("📳 [VIBRATION] Topic: " + deviceConfig.vibrationTopic);
+      }
     }
 
-    // Aplicar cooldown para evitar múltiples detecciones rápidas
-    if (vibrationDetected && millis() - lastVibrationChange > deviceConfig.vibrationThreshold) {
-      lastVibrationChange = millis();
-      vibrationState = true;
-
-      // Publicar detección de vibración
-      publishVibrationState(true);
-
-      // LOG DE DETECCIÓN (siempre visible)
-      Serial.println("📳 [VIBRATION] ¡VIBRACIÓN DETECTADA! - Publicando a MQTT...");
-      Serial.println("📳 [VIBRATION] Topic: " + deviceConfig.vibrationTopic);
-
-    } else if (!vibrationDetected && vibrationState) {
-      // Resetear estado cuando no hay vibración
+    // Detectar fin de vibración (LOW a HIGH)
+    if (currentPinState == HIGH && lastVibrationState == LOW) {
       vibrationState = false;
       Serial.println("📳 [VIBRATION] Vibración finalizada");
     }
+
+    lastVibrationState = currentPinState;
   }
 }
 
@@ -1426,7 +1423,7 @@ void loadConfiguration() {
   deviceConfig.button2Topic = preferences.getString("button2Topic", "sensor/button2");
   deviceConfig.vibrationTopic = preferences.getString("vibrationTopic", "sensor/vibration");
   deviceConfig.mainMqttTopic = preferences.getString("mainMqttTopic", "multi-sensor/iot");
-  deviceConfig.vibrationThreshold = preferences.getInt("vibrThresh", 100); // 100ms por defecto
+  deviceConfig.vibrationThreshold = preferences.getInt("vibrThresh", 250); // 250ms = ~4 publicaciones/segundo
 
   // Cargar configuración WiFi
   wifiConfig.ssid = preferences.getString("wifiSSID", "");
@@ -1573,7 +1570,7 @@ void resetToDefaults() {
   deviceConfig.button2Topic = "sensor/button2";
   deviceConfig.vibrationTopic = "sensor/vibration";
   deviceConfig.mainMqttTopic = "multi-sensor/iot";
-  deviceConfig.vibrationThreshold = 100; // 100ms cooldown por defecto
+  deviceConfig.vibrationThreshold = 250; // 250ms = ~4 publicaciones/segundo
 
   saveConfiguration();
   Serial.println("Configuración restablecida a valores por defecto");
@@ -1677,6 +1674,21 @@ void enterHotspotMode() {
   } else {
     Serial.println("LittleFS inicializado correctamente");
     logSystemEvent("LITTLEFS_OK", "LittleFS inicializado en modo hotspot");
+
+    // DEBUG: Listar archivos en LittleFS
+    Serial.println("=== Archivos en LittleFS ===");
+    File root = LittleFS.open("/");
+    File file = root.openNextFile();
+    int fileCount = 0;
+    while (file) {
+      Serial.printf("Archivo: %s, Tamaño: %d bytes\n", file.name(), file.size());
+      file = root.openNextFile();
+      fileCount++;
+    }
+    if (fileCount == 0) {
+      Serial.println("⚠️ LittleFS está VACIO - No hay archivos!");
+    }
+    Serial.println("===============================");
   }
 
   // Apagar ambos LEDs inicialmente

@@ -1,3 +1,42 @@
+# Monitor serial
 pio device monitor --port /dev/ttyUSB0 --baud 115200 --filter esp32_exception_decoder
 
+# ===================================================================
+# DEPLOY LOCAL (vía USB)
+# ===================================================================
+
+# Deploy completo (clean + build + upload firmware + upload filesystem)
+./deploy_all.sh
+
+# Comandos individuales
+pio run --target clean              # Limpiar build
+pio run                             # Compilar
+pio run --target upload --upload-port /dev/ttyUSB0        # Subir firmware
+pio run --target uploadfs --upload-port /dev/ttyUSB0      # Subir filesystem
+
+# ===================================================================
+# DEPLOY OTA (actualización remota automática)
+# ===================================================================
+
+# Deploy OTA - INCREMENTA VERSIÓN AUTOMÁTICAMENTE
+./deploy_script_ftp.sh
+
+# El script hace automáticamente:
+# 1. Lee versión actual (ej: 1.6.8)
+# 2. Incrementa versión (ej: 1.6.9)
+# 3. Actualiza platformio.ini
+# 4. Actualiza multi-sensor-iot.ino
+# 5. Clean
+# 6. Compila
+# 7. Sube firmware + version.json al servidor OTA
+# 8. Los dispositivos se actualizan en ~5 minutos
+
+# Ejemplo de salida:
+# 📍 Versión actual: 1.6.8
+# 📍 Nueva versión: 1.6.9
+# ✅ Versión actualizada en platformio.ini
+# ✅ Versión actualizada en multi-sensor-iot.ino
+# 🧹 Limpiando build anterior...
+# 🔨 Compilando firmware...
+# 📤 Subiendo firmware al servidor...
 
