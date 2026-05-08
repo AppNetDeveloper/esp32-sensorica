@@ -13,6 +13,7 @@ Uso:
 import subprocess
 import sys
 import platform
+import os
 import serial.tools.list_ports
 
 
@@ -61,25 +62,28 @@ def main():
     print(f"  Puerto:  {port}")
     print("=" * 50)
 
+    # Cambiar al directorio del proyecto
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
     # 1. Limpiar build anterior
-    run_step("Limpiando build anterior...", "pio run --target clean")
+    run_step("Limpiando build anterior...", "python -m platformio run --target clean")
 
     # 2. Compilar firmware
-    run_step("Compilando firmware...", "pio run")
+    run_step("Compilando firmware...", "python -m platformio run")
 
     # 3. Compilar filesystem
-    run_step("Compilando filesystem (config.html)...", "pio run --target buildfs")
+    run_step("Compilando filesystem (config.html)...", "python -m platformio run --target buildfs")
 
     # 4. Subir firmware
     print("\n--- Subiendo firmware ---")
     print("   Pon el ESP32 en modo bootloader (BOOT + RESET)")
     input("   Presiona ENTER cuando este listo... ")
-    run_step("Subiendo firmware...", f"pio run --target upload --upload-port {port}")
+    run_step("Subiendo firmware...", f"python -m platformio run --target upload --upload-port {port}")
 
     # 5. Subir filesystem
     print("\n--- Subiendo filesystem (config.html) ---")
     print("   Manten el ESP32 en modo bootloader")
-    run_step("Subiendo filesystem...", f"pio run --target uploadfs --upload-port {port}")
+    run_step("Subiendo filesystem...", f"python -m platformio run --target uploadfs --upload-port {port}")
 
     print("\n" + "=" * 50)
     print("  DEPLOY COMPLETADO")
