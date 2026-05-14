@@ -1,5 +1,4 @@
-# Monitor serial
-pio device monitor --port /dev/ttyUSB0 --baud 115200 --filter esp32_exception_decoder
+# Monitor 
 
 # ===================================================================
 # DEPLOY LOCAL (vía USB)
