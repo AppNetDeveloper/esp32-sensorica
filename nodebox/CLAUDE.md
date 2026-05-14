@@ -52,7 +52,6 @@ The deploy script:
 ### Hardware Platform
 - **WT32-ETH01**: ESP32 with Ethernet + WiFi hybrid capability
 - **HC-SR04**: Ultrasonic distance sensor (1-400cm range)
-- **Triple LED System**: Status (green), Error (red), Configuration (blue)
 - **Configuration Button**: GPIO 12 with multi-mode operation
 
 ### Operating Modes
@@ -94,11 +93,6 @@ xTaskCreatePinnedToCore(otaTask, "OTA Task", 10000, NULL, 2, NULL, 1);
 - **Version Comparison**: Semantic versioning with rollback protection
 - **Safety Mechanisms**: Boot counting, checksum verification, automatic rollback
 - **Fail-safe**: Only applies updates after successful download and verification
-
-#### LED Status Indication
-- **Green (GPIO 4)**: System OK - solid when Ethernet + MQTT connected
-- **Red (GPIO 5)**: Error indication - blinking when connection issues
-- **Blue (GPIO 2)**: Configuration mode - solid in bridge, dual-blink in hotspot
 
 ### Data Structures
 
@@ -189,12 +183,13 @@ pio run -e esp32dev_debug
 GPIO 25: Ultrasonic Trigger / Pulsador 1
 GPIO 26: Ultrasonic Echo / Pulsador 2
 GPIO 12: Configuration Button (pull-up)
-GPIO 2: Configuration LED (blue)
-GPIO 4: Status LED (green)
-GPIO 5: Error LED (red)
+GPIO 0: Pulsador (disponible, pull-up interno)
+GPIO 4: Pulsador (disponible, pull-up interno)
 GPIO 13: Pulsador 1 (alternativo)
 GPIO 14: Pulsador 2 (alternativo)
 GPIO 32: Sensor de vibraciones SW-420
+GPIO 34: Entrada solo lectura (sin pull-up interno)
+GPIO 35: Entrada solo lectura (sin pull-up interno)
 ```
 
 ## OTA Server Configuration
