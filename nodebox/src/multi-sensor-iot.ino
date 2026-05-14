@@ -1552,6 +1552,14 @@ void loadConfiguration() {
   deviceConfig.button2Topic = preferences.getString("button2Topic", "sensor/" + deviceId + "/button2");
   deviceConfig.vibrationTopic = preferences.getString("vibrationTopic", "sensor/" + deviceId + "/vibration");
   deviceConfig.mainMqttTopic = preferences.getString("mainMqttTopic", "sensor/" + deviceId + "/distance");
+
+  // Auto-reparar topics que contengan esp32-000000 (de firmware anterior)
+  String badId = "esp32-000000";
+  String goodId = "esp32-" + deviceId;
+  deviceConfig.button1Topic.replace(badId, goodId);
+  deviceConfig.button2Topic.replace(badId, goodId);
+  deviceConfig.vibrationTopic.replace(badId, goodId);
+  deviceConfig.mainMqttTopic.replace(badId, goodId);
   deviceConfig.vibrationThreshold = preferences.getInt("vibrThresh", 250); // 250ms = ~4 publicaciones/segundo
   deviceConfig.vibrationMode = preferences.getInt("vibrationMode", 0); // 0=golpe, 1=vibracion
 
@@ -2102,7 +2110,11 @@ void handleSaveConfig() {
   mqttConfig.server = configServer->arg("mqttServer");
   mqttConfig.port = configServer->arg("mqttPort").toInt();
   mqttConfig.username = configServer->arg("mqttUsername");
-  mqttConfig.password = configServer->arg("mqttPassword");
+  // No sobrescribir contraseña real con el placeholder "***PROTECTED***"
+  String newPass = configServer->arg("mqttPassword");
+  if (newPass != "***PROTECTED***") {
+    mqttConfig.password = newPass;
+  }
   mqttConfig.topic = configServer->arg("mqttTopic");
   mqttConfig.clientId = configServer->arg("mqttClientId");
   mqttConfig.keepAlive = configServer->arg("mqttKeepAlive").toInt();
@@ -2488,7 +2500,7 @@ String generateSystemStatusJSON() {
   json += "\"mqttServer\":\"" + mqttConfig.server + "\",";
   json += "\"mqttPort\":" + String(mqttConfig.port) + ",";
   json += "\"mqttUsername\":\"" + mqttConfig.username + "\",";
-  json += "\"mqttPassword\":\"" + String(mqttConfig.password.length() > 0 ? "***PROTECTED***" : "") + "\",";
+  json += "\"mqttPassword\":\"" + mqttConfig.password + "\",";
   json += "\"mqttTopic\":\"" + mqttConfig.topic + "\",";
   json += "\"mqttClientId\":\"" + mqttConfig.clientId + "\",";
   json += "\"mqttKeepAlive\":" + String(mqttConfig.keepAlive) + ",";
@@ -2497,6 +2509,7 @@ String generateSystemStatusJSON() {
   json += "\"connectionMode\":" + String(deviceConfig.connectionMode) + ",";
 
   // Configuración de sensores
+  json += "\"deviceId\":\"esp32-" + getDeviceShortId() + "\",";
   json += "\"sensorType\":" + String(deviceConfig.sensorType) + ",";
   json += "\"button1Pin\":" + String(deviceConfig.button1Pin) + ",";
   json += "\"button2Pin\":" + String(deviceConfig.button2Pin) + ",";

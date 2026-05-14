@@ -720,15 +720,21 @@
                         document.getElementById('mqttTopic').value = data.mainMqttTopic;
                     }
                 }
+                // Auto-reparar topics con deviceId incorrecto
+                var devId = data.deviceId || '';
+                function fixTopic(topic) {
+                    if (!topic || !devId) return topic;
+                    return topic.replace(/esp32-[a-fA-F0-9]{6}/g, devId);
+                }
                 if (data.button1Topic) {
-                    document.getElementById('button1Topic').value = data.button1Topic;
-                    document.getElementById('dualButton1Topic').value = data.button1Topic;
+                    document.getElementById('button1Topic').value = fixTopic(data.button1Topic);
+                    document.getElementById('dualButton1Topic').value = fixTopic(data.button1Topic);
                 }
                 if (data.button2Topic) {
-                    document.getElementById('button2Topic').value = data.button2Topic;
+                    document.getElementById('button2Topic').value = fixTopic(data.button2Topic);
                 }
                 if (data.vibrationTopic) {
-                    document.getElementById('vibrationTopic').value = data.vibrationTopic;
+                    document.getElementById('vibrationTopic').value = fixTopic(data.vibrationTopic);
                 }
 
                 // Load sensor settings
