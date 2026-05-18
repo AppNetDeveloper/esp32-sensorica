@@ -475,7 +475,7 @@ void sensorTask(void *pvParameters) {
     digitalWrite(TRIG_PIN, LOW);
 
     // Medir la duración del pulso de eco (echo)
-    duration = pulseIn(ECHO_PIN, HIGH);
+    duration = pulseIn(ECHO_PIN, HIGH, 25000);  // Timeout 25ms (max ~400cm)
 
     // NUEVO: Log de depuración para ver la lectura cruda del sensor
     Serial.print("Sensor RAW > Duracion del pulso (us): ");
@@ -519,7 +519,8 @@ void sensorTask(void *pvParameters) {
 void barcodeTask(void *pvParameters) {
   Serial.println("Barcode Task iniciada");
   Serial.println("[BARCODE] RX=GPIO" + String(BARCODE_RX_PIN) + " TX=GPIO" + String(BARCODE_TX_PIN) + " Baud=" + String(deviceConfig.barcodeBaudRate));
-  String readBuffer = "";
+  char readBuf[201];
+  int readIdx = 0;
   unsigned long lastStatusMs = 0;
 
   for (;;) {
@@ -539,38 +540,37 @@ void barcodeTask(void *pvParameters) {
       char c = Serial2.read();
 
       if (c == '\r' || c == '\n') {
-        if (readBuffer.length() > 0) {
+        if (readIdx > 0) {
+          readBuf[readIdx] = '\0';
+          String code(readBuf);
           Serial.print("[BARCODE] ✅ Código leído: ");
-          Serial.println(readBuffer);
+          Serial.println(code);
 
-          bool isDuplicate = false;
-          if (deviceConfig.barcodeDedup) {
-            if (xSemaphoreTake(barcodeMutex, (TickType_t) 10) == pdTRUE) {
-              if (readBuffer == lastBarcode) {
-                isDuplicate = true;
-                Serial.println("[BARCODE] Código duplicado, ignorando...");
-              }
-              xSemaphoreGive(barcodeMutex);
-            }
-          }
-
-          if (!isDuplicate) {
-            if (xSemaphoreTake(barcodeMutex, (TickType_t) 10) == pdTRUE) {
-              currentBarcode = readBuffer;
-              lastBarcode = readBuffer;
+          bool shouldPublish = false;
+          if (xSemaphoreTake(barcodeMutex, (TickType_t) 10) == pdTRUE) {
+            if (deviceConfig.barcodeDedup && code == lastBarcode) {
+              Serial.println("[BARCODE] Código duplicado, ignorando...");
+            } else {
+              currentBarcode = code;
+              lastBarcode = code;
               barcodeAvailable = true;
-              xSemaphoreGive(barcodeMutex);
+              shouldPublish = true;
             }
-            publishBarcode(readBuffer);
+            xSemaphoreGive(barcodeMutex);
           }
 
-          readBuffer = "";
+          if (shouldPublish) {
+            publishBarcode(code);
+          }
+
+          readIdx = 0;
         }
       } else {
-        readBuffer += c;
-        if (readBuffer.length() > 200) {
+        if (readIdx < 200) {
+          readBuf[readIdx++] = c;
+        } else {
           Serial.println("[BARCODE] Buffer excedido, descartando");
-          readBuffer = "";
+          readIdx = 0;
         }
       }
     }
@@ -2238,8 +2238,14 @@ void handleSaveConfig() {
   for (int i = 0; i < configServer->args(); i++) {
     String argName = configServer->argName(i);
     String argValue = configServer->arg(i);
-    Serial.println("  " + argName + " = " + argValue);
-    debugInfo += "<li><strong>" + argName + "</strong> = " + argValue + "</li>";
+    // No mostrar contraseñas en logs
+    if (argName.indexOf("assword") >= 0 || argName.indexOf("Password") >= 0) {
+      Serial.println("  " + argName + " = [OCULTO]");
+      debugInfo += "<li><strong>" + argName + "</strong> = [OCULTO]</li>";
+    } else {
+      Serial.println("  " + argName + " = " + argValue);
+      debugInfo += "<li><strong>" + argName + "</strong> = " + argValue + "</li>";
+    }
   }
   debugInfo += "</ul>";
 
@@ -2254,7 +2260,11 @@ void handleSaveConfig() {
   // Guardar configuración WiFi
   wifiConfig.enabled = configServer->hasArg("wifiEnabled");
   wifiConfig.ssid = configServer->arg("wifiSSID");
-  wifiConfig.password = configServer->arg("wifiPassword");
+  // No sobrescribir contraseña WiFi real con el placeholder "***PROTECTED***"
+  String newWifiPass = configServer->arg("wifiPassword");
+  if (newWifiPass != "***PROTECTED***") {
+    wifiConfig.password = newWifiPass;
+  }
 
   // Guardar configuración MQTT
   mqttConfig.server = configServer->arg("mqttServer");
@@ -2653,7 +2663,7 @@ String generateSystemStatusJSON() {
   // Configuración WiFi
   json += "\"wifiEnabled\":" + String(wifiConfig.enabled ? "true" : "false") + ",";
   json += "\"wifiSSID\":\"" + wifiConfig.ssid + "\",";
-  json += "\"wifiPassword\":\"" + String(wifiConfig.password.length() > 0 ? "***PROTECTED***" : "") + "\",";
+  json += "\"wifiPassword\":\"" + wifiConfig.password + "\",";
 
   // Configuración MQTT
   json += "\"mqttServer\":\"" + mqttConfig.server + "\",";
