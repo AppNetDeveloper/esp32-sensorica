@@ -344,6 +344,7 @@
                         <option value="2">🔘🔘 2 Pulsadores</option>
                         <option value="3">📳 Sensor Vibración SW-420</option>
                         <option value="4">📳🔘 Vibración + 1 Pulsador</option>
+                        <option value="5">📊 Lector Códigos de Barras GM8-61S</option>
                     </select>
                 </div>
 
@@ -487,6 +488,37 @@
                         • Sensibilidad ajustable vía potenciómetro
                     </div>
                 </div>
+
+                <!-- Configuración para Lector de Códigos de Barras -->
+                <div id="barcode-config" class="sensor-config" style="display:none;">
+                    <div class="form-group">
+                        <label for="barcodeTopic">Topic MQTT Barcode:</label>
+                        <input type="text" id="barcodeTopic" name="barcodeTopic" placeholder="sensor/barcode">
+                    </div>
+                    <div class="form-group">
+                        <label for="barcodeBaudRate">Velocidad Baudios:</label>
+                        <select id="barcodeBaudRate" name="barcodeBaudRate">
+                            <option value="9600" selected>9600 (GM8-61S por defecto)</option>
+                            <option value="19200">19200</option>
+                            <option value="38400">38400</option>
+                            <option value="57600">57600</option>
+                            <option value="115200">115200</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="barcodeDedup">
+                            <input type="checkbox" id="barcodeDedup" name="barcodeDedup">
+                            Filtrar códigos duplicados consecutivos
+                        </label>
+                        <small>Si está activo, no publicará el mismo código dos veces seguidas</small>
+                    </div>
+                    <div class="status success">
+                        <strong>Configuración Pines GM8-61S:</strong><br>
+                        • RX (ESP32): IO15 (pin 7 header izq)<br>
+                        • TX (ESP32): IO4 (pin 11 header izq)<br>
+                        • Pines fijos, no configurables
+                    </div>
+                </div>
             </div>
 
             <!-- System Tab -->
@@ -531,6 +563,7 @@
             document.getElementById('single-button-config').style.display = 'none';
             document.getElementById('dual-buttons-config').style.display = 'none';
             document.getElementById('vibration-config').style.display = 'none';
+            document.getElementById('barcode-config').style.display = 'none';
 
             // Show relevant configuration
             switch(sensorType) {
@@ -549,6 +582,9 @@
                 case '4': // Vibración + 1 Pulsador
                     document.getElementById('vibration-config').style.display = 'block';
                     document.getElementById('single-button-config').style.display = 'block';
+                    break;
+                case '5': // Lector de Códigos de Barras
+                    document.getElementById('barcode-config').style.display = 'block';
                     break;
             }
         }
@@ -743,6 +779,17 @@
                 }
                 if (data.vibrationMode !== undefined) {
                     document.getElementById('vibrationMode').value = data.vibrationMode;
+                }
+
+                // Load barcode configuration
+                if (data.barcodeTopic) {
+                    document.getElementById('barcodeTopic').value = data.barcodeTopic;
+                }
+                if (data.barcodeBaudRate !== undefined) {
+                    document.getElementById('barcodeBaudRate').value = data.barcodeBaudRate;
+                }
+                if (data.barcodeDedup !== undefined) {
+                    document.getElementById('barcodeDedup').checked = data.barcodeDedup;
                 }
 
                 // Load checkboxes

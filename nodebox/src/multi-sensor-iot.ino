@@ -20,7 +20,8 @@ enum SensorType {
   SENSOR_SINGLE_BUTTON = 1,     // 1 Pulsador digital
   SENSOR_DUAL_BUTTONS = 2,      // 2 Pulsadores digitales
   SENSOR_VIBRATION = 3,         // Sensor de vibraciones SW-420
-  SENSOR_VIBRATION_BUTTON = 4   // Vibración + 1 Pulsador
+  SENSOR_VIBRATION_BUTTON = 4,  // Vibración + 1 Pulsador
+  SENSOR_BARCODE = 5            // GM8-61S Lector de códigos de barras
 };
 
 enum ConnectionMode {
@@ -35,6 +36,11 @@ enum ConnectionMode {
 #define BUTTON1_PIN 13   // Pulsador 1 (alternativo)
 #define BUTTON2_PIN 14   // Pulsador 2 (alternativo)
 #define VIBRATION_PIN 32 // Sensor de vibraciones SW-420
+
+// -- PINES PARA LECTOR DE CÓDIGOS DE BARRAS (GM8-61S) --
+#define BARCODE_RX_PIN 5     // RX del ESP32 (IO5) ← TX del escáner
+#define BARCODE_TX_PIN 17    // TX del ESP32 (IO17) ← RX del escáner
+#define BARCODE_DEFAULT_BAUD 9600
 
 // -- PINES PARA MODO CONFIGURACIÓN --
 #define CONFIG_BUTTON_PIN 12  // Botón para entrar en modo bridge/hotspot
@@ -126,6 +132,11 @@ struct DeviceConfig {
   int vibrationMode; // 0=golpe (solo publica 1), 1=vibracion (publica 1 y 0)
 
   int connectionMode; // 0=Ethernet, 1=WiFi, 2=Bluetooth, 3=Dual ETH+WiFi, 4=Dual WiFi+BT
+
+  // Configuración del lector de códigos de barras
+  String barcodeTopic;         // Topic MQTT para códigos de barras
+  int barcodeBaudRate;         // Velocidad del puerto serie (default 9600)
+  bool barcodeDedup;           // Filtrar códigos duplicados consecutivos
 };
 
 
@@ -153,6 +164,12 @@ bool vibrationState = false;
 bool lastVibrationState = false;
 unsigned long lastVibrationChange = 0;
 unsigned long vibrationCooldown = 100; // 100ms cooldown entre detecciones
+
+// Variables para el lector de códigos de barras
+String lastBarcode = "";                    // Último código publicado (para deduplicación)
+bool barcodeAvailable = false;              // Flag: nuevo código listo para publicar
+String currentBarcode = "";                 // Código actual leído desde Serial2
+SemaphoreHandle_t barcodeMutex = NULL;      // Mutex para acceso concurrente al código
 
 bool bridgeMode = false;
 bool hotspotMode = false;
@@ -215,6 +232,8 @@ void publishVibrationState(bool state);
 void publishConnectionStatus();
 void mqttTask(void *pvParameters);
 void otaTask(void *pvParameters);
+void barcodeTask(void *pvParameters);
+void publishBarcode(String barcode);
 
 void initializePreferences();
 void loadConfiguration();
@@ -304,6 +323,7 @@ void setup() {
   Serial.println("🔄 [RESET OTA] Backoff será eliminado - verificará inmediatamente");
 
   sensorMutex = xSemaphoreCreateMutex();
+  barcodeMutex = xSemaphoreCreateMutex();
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
 
@@ -380,6 +400,11 @@ checkConfigButton();
     case SENSOR_VIBRATION_BUTTON:
       Serial.println("Omitiendo tarea de sensor ultrasónico (tipo: " + String(deviceConfig.sensorType) + ")");
       break;
+    case SENSOR_BARCODE:
+      Serial.println("Creando tarea de lector de códigos de barras");
+      Serial2.begin(deviceConfig.barcodeBaudRate, SERIAL_8N1, BARCODE_RX_PIN, BARCODE_TX_PIN);
+      xTaskCreatePinnedToCore(barcodeTask, "Barcode Task", 10000, NULL, 1, NULL, 0);
+      break;
     default:
       Serial.println("Tipo de sensor desconocido, creando tarea ultrasónica por defecto");
       xTaskCreatePinnedToCore(sensorTask, "Sensor Task", 10000, NULL, 1, NULL, 0);
@@ -417,6 +442,7 @@ void loop() {
 
   readButtons();
   readVibrationSensor();
+
 
 
   // Operación normal - verificar modo de conexión y estado del sistema
@@ -484,6 +510,72 @@ void sensorTask(void *pvParameters) {
     
     // Esperar el intervalo configurado para la siguiente lectura
     vTaskDelay(localSensorInterval / portTICK_PERIOD_MS);
+  }
+}
+
+// =====================================================================
+// TAREA: Lector de códigos de barras GM8-61S (Serial2)
+// =====================================================================
+void barcodeTask(void *pvParameters) {
+  Serial.println("Barcode Task iniciada");
+  Serial.println("[BARCODE] RX=GPIO" + String(BARCODE_RX_PIN) + " TX=GPIO" + String(BARCODE_TX_PIN) + " Baud=" + String(deviceConfig.barcodeBaudRate));
+  String readBuffer = "";
+  unsigned long lastStatusMs = 0;
+
+  for (;;) {
+    if (!Serial2) {
+      Serial.println("[BARCODE] ⚠️ Serial2 NO disponible!");
+      vTaskDelay(5000 / portTICK_PERIOD_MS);
+      continue;
+    }
+
+    // Estado periódico cada 30 segundos para saber que la tarea está viva
+    if (millis() - lastStatusMs > 30000) {
+      Serial.println("[BARCODE] ⏳ Esperando datos... Serial2 available=" + String(Serial2.available()));
+      lastStatusMs = millis();
+    }
+
+    while (Serial2.available()) {
+      char c = Serial2.read();
+
+      if (c == '\r' || c == '\n') {
+        if (readBuffer.length() > 0) {
+          Serial.print("[BARCODE] ✅ Código leído: ");
+          Serial.println(readBuffer);
+
+          bool isDuplicate = false;
+          if (deviceConfig.barcodeDedup) {
+            if (xSemaphoreTake(barcodeMutex, (TickType_t) 10) == pdTRUE) {
+              if (readBuffer == lastBarcode) {
+                isDuplicate = true;
+                Serial.println("[BARCODE] Código duplicado, ignorando...");
+              }
+              xSemaphoreGive(barcodeMutex);
+            }
+          }
+
+          if (!isDuplicate) {
+            if (xSemaphoreTake(barcodeMutex, (TickType_t) 10) == pdTRUE) {
+              currentBarcode = readBuffer;
+              lastBarcode = readBuffer;
+              barcodeAvailable = true;
+              xSemaphoreGive(barcodeMutex);
+            }
+            publishBarcode(readBuffer);
+          }
+
+          readBuffer = "";
+        }
+      } else {
+        readBuffer += c;
+        if (readBuffer.length() > 200) {
+          Serial.println("[BARCODE] Buffer excedido, descartando");
+          readBuffer = "";
+        }
+      }
+    }
+
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 
@@ -650,6 +742,30 @@ void publishVibrationState(bool state) {
   }
 }
 
+void publishBarcode(String barcode) {
+  if (client.connected()) {
+    StaticJsonDocument<300> doc;
+    char jsonBuffer[300];
+
+    doc["barcode"] = barcode;
+    doc["device"] = deviceConfig.deviceName;
+    doc["location"] = deviceConfig.location;
+    doc["timestamp"] = millis();
+
+    serializeJson(doc, jsonBuffer);
+
+    bool result = client.publish(deviceConfig.barcodeTopic.c_str(), jsonBuffer);
+    if (deviceConfig.debugMode) {
+      Serial.print("MQTT > Publicando barcode a ");
+      Serial.print(deviceConfig.barcodeTopic);
+      Serial.print(": ");
+      Serial.print(result ? "OK" : "FALLÓ");
+      Serial.print(" -> ");
+      Serial.println(jsonBuffer);
+    }
+  }
+}
+
 // Publicar mensaje de conexión al topic fijo
 void publishConnectionStatus() {
   if (client.connected()) {
@@ -798,8 +914,11 @@ bool reconectarMQTT() {
   // Intentar conectar con autenticación si está configurada
   bool connected = false;
   if (mqttConfig.username.length() > 0) {
+    Serial.print("MQTT > Conectando con usuario: ");
+    Serial.println(mqttConfig.username);
     connected = client.connect(clientId.c_str(), mqttConfig.username.c_str(), mqttConfig.password.c_str());
   } else {
+    Serial.println("MQTT > Conectando SIN credenciales (username vacío)");
     connected = client.connect(clientId.c_str());
   }
 
@@ -1563,6 +1682,11 @@ void loadConfiguration() {
   deviceConfig.vibrationThreshold = preferences.getInt("vibrThresh", 250); // 250ms = ~4 publicaciones/segundo
   deviceConfig.vibrationMode = preferences.getInt("vibrationMode", 0); // 0=golpe, 1=vibracion
 
+  // Configuración del lector de códigos de barras
+  deviceConfig.barcodeTopic = preferences.getString("barcodeTopic", "sensor/" + deviceId + "/barcode");
+  deviceConfig.barcodeBaudRate = preferences.getInt("barcodeBaud", BARCODE_DEFAULT_BAUD);
+  deviceConfig.barcodeDedup = preferences.getBool("barcodeDedup", true);
+
   // Cargar configuración WiFi
   wifiConfig.ssid = preferences.getString("wifiSSID", "");
   wifiConfig.password = preferences.getString("wifiPassword", "");
@@ -1614,6 +1738,11 @@ void saveConfiguration() {
   preferences.putString("mainMqttTopic", deviceConfig.mainMqttTopic);
   preferences.putInt("vibrThresh", deviceConfig.vibrationThreshold);
   preferences.putInt("vibrationMode", deviceConfig.vibrationMode);
+
+  // Configuración del lector de códigos de barras
+  preferences.putString("barcodeTopic", deviceConfig.barcodeTopic);
+  preferences.putInt("barcodeBaud", deviceConfig.barcodeBaudRate);
+  preferences.putBool("barcodeDedup", deviceConfig.barcodeDedup);
 
   // Guardar configuración WiFi
   preferences.putString("wifiSSID", wifiConfig.ssid);
@@ -1679,6 +1808,22 @@ void setupSensorPins() {
       pinMode(deviceConfig.button1Pin, INPUT_PULLUP);
       break;
 
+    case SENSOR_BARCODE:
+      Serial.println("========================================");
+      Serial.println("Configurando LECTOR DE CÓDIGOS DE BARRAS");
+      Serial.println("========================================");
+      Serial.print("  RX Pin: GPIO ");
+      Serial.println(BARCODE_RX_PIN);
+      Serial.print("  TX Pin: GPIO ");
+      Serial.println(BARCODE_TX_PIN);
+      Serial.print("  Baud Rate: ");
+      Serial.println(deviceConfig.barcodeBaudRate);
+      Serial.print("  Topic: ");
+      Serial.println(deviceConfig.barcodeTopic);
+      Serial.print("  Deduplicación: ");
+      Serial.println(deviceConfig.barcodeDedup ? "Habilitada" : "Deshabilitada");
+      break;
+
     default:
       Serial.println("Tipo de sensor no reconocido, usando ultrasonido por defecto");
       deviceConfig.sensorType = SENSOR_ULTRASONIC;
@@ -1728,6 +1873,11 @@ void resetToDefaults() {
   deviceConfig.mainMqttTopic = "sensor/" + deviceId + "/distance";
   deviceConfig.vibrationThreshold = 250; // 250ms = ~4 publicaciones/segundo
   deviceConfig.vibrationMode = 0; // 0=golpe por defecto
+
+  // Valores por defecto para lector de códigos de barras
+  deviceConfig.barcodeTopic = "sensor/" + deviceId + "/barcode";
+  deviceConfig.barcodeBaudRate = BARCODE_DEFAULT_BAUD;
+  deviceConfig.barcodeDedup = true;
 
   saveConfiguration();
   Serial.println("Configuración restablecida a valores por defecto");
@@ -2177,6 +2327,15 @@ void handleSaveConfig() {
     }
   }
 
+  // Configuración del lector de códigos de barras
+  if (configServer->hasArg("barcodeTopic")) {
+    deviceConfig.barcodeTopic = configServer->arg("barcodeTopic");
+  }
+  if (configServer->hasArg("barcodeBaudRate")) {
+    deviceConfig.barcodeBaudRate = configServer->arg("barcodeBaudRate").toInt();
+  }
+  deviceConfig.barcodeDedup = configServer->hasArg("barcodeDedup");
+
   // Umbral de vibración
   if (configServer->hasArg("vibrationThreshold")) {
     deviceConfig.vibrationThreshold = configServer->arg("vibrationThreshold").toInt();
@@ -2500,7 +2659,7 @@ String generateSystemStatusJSON() {
   json += "\"mqttServer\":\"" + mqttConfig.server + "\",";
   json += "\"mqttPort\":" + String(mqttConfig.port) + ",";
   json += "\"mqttUsername\":\"" + mqttConfig.username + "\",";
-  json += "\"mqttPassword\":\"" + mqttConfig.password + "\",";
+  json += "\"mqttPassword\":\"" + String(mqttConfig.password.length() > 0 ? "***PROTECTED***" : "") + "\",";
   json += "\"mqttTopic\":\"" + mqttConfig.topic + "\",";
   json += "\"mqttClientId\":\"" + mqttConfig.clientId + "\",";
   json += "\"mqttKeepAlive\":" + String(mqttConfig.keepAlive) + ",";
@@ -2522,6 +2681,9 @@ String generateSystemStatusJSON() {
   json += "\"button2Topic\":\"" + deviceConfig.button2Topic + "\",";
   json += "\"vibrationTopic\":\"" + deviceConfig.vibrationTopic + "\",";
   json += "\"mainMqttTopic\":\"" + deviceConfig.mainMqttTopic + "\",";
+  json += "\"barcodeTopic\":\"" + deviceConfig.barcodeTopic + "\",";
+  json += "\"barcodeBaudRate\":" + String(deviceConfig.barcodeBaudRate) + ",";
+  json += "\"barcodeDedup\":" + String(deviceConfig.barcodeDedup ? "true" : "false") + ",";
 
   json += "\"sensorInterval\":" + String(deviceConfig.sensorInterval) + ",";
   json += "\"readingsCount\":" + String(deviceConfig.readingsCount) + ",";
