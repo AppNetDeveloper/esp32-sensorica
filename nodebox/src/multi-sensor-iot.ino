@@ -21,7 +21,10 @@ enum SensorType {
   SENSOR_DUAL_BUTTONS = 2,      // 2 Pulsadores digitales
   SENSOR_VIBRATION = 3,         // Sensor de vibraciones SW-420
   SENSOR_VIBRATION_BUTTON = 4,  // Vibración + 1 Pulsador
-  SENSOR_BARCODE = 5            // GM8-61S Lector de códigos de barras
+  SENSOR_BARCODE = 5,           // GM8-61S Lector de códigos de barras
+  SENSOR_QR = 6,                // Lector QR (mismo hardware que barcode)
+  SENSOR_QR_BUTTON = 7,         // Lector QR + 1 Pulsador
+  SENSOR_QR_VIBRATION = 8       // Lector QR + Sensor de vibración
 };
 
 enum ConnectionMode {
@@ -137,6 +140,7 @@ struct DeviceConfig {
   String barcodeTopic;         // Topic MQTT para códigos de barras
   int barcodeBaudRate;         // Velocidad del puerto serie (default 9600)
   bool barcodeDedup;           // Filtrar códigos duplicados consecutivos
+  bool qrGateEnabled;          // QR: solo publicar cuando pulsador/vibración se activa
 };
 
 
@@ -165,11 +169,12 @@ bool lastVibrationState = false;
 unsigned long lastVibrationChange = 0;
 unsigned long vibrationCooldown = 100; // 100ms cooldown entre detecciones
 
-// Variables para el lector de códigos de barras
+// Variables para el lector de códigos de barras/QR
 String lastBarcode = "";                    // Último código publicado (para deduplicación)
 bool barcodeAvailable = false;              // Flag: nuevo código listo para publicar
 String currentBarcode = "";                 // Código actual leído desde Serial2
 SemaphoreHandle_t barcodeMutex = NULL;      // Mutex para acceso concurrente al código
+volatile bool qrGateOpen = false;           // Gate: pulsador/vibración activó lectura QR
 
 bool bridgeMode = false;
 bool hotspotMode = false;
@@ -401,7 +406,10 @@ checkConfigButton();
       Serial.println("Omitiendo tarea de sensor ultrasónico (tipo: " + String(deviceConfig.sensorType) + ")");
       break;
     case SENSOR_BARCODE:
-      Serial.println("Creando tarea de lector de códigos de barras");
+    case SENSOR_QR:
+    case SENSOR_QR_BUTTON:
+    case SENSOR_QR_VIBRATION:
+      Serial.println("Creando tarea de lector de códigos de barras/QR");
       Serial2.begin(deviceConfig.barcodeBaudRate, SERIAL_8N1, BARCODE_RX_PIN, BARCODE_TX_PIN);
       xTaskCreatePinnedToCore(barcodeTask, "Barcode Task", 10000, NULL, 1, NULL, 0);
       break;
@@ -551,10 +559,23 @@ void barcodeTask(void *pvParameters) {
             if (deviceConfig.barcodeDedup && code == lastBarcode) {
               Serial.println("[BARCODE] Código duplicado, ignorando...");
             } else {
-              currentBarcode = code;
-              lastBarcode = code;
-              barcodeAvailable = true;
-              shouldPublish = true;
+              // Gate logic: si qrGateEnabled, solo publicar cuando qrGateOpen
+              bool isQrType = (deviceConfig.sensorType == SENSOR_QR ||
+                               deviceConfig.sensorType == SENSOR_QR_BUTTON ||
+                               deviceConfig.sensorType == SENSOR_QR_VIBRATION);
+              if (isQrType && deviceConfig.qrGateEnabled && !qrGateOpen) {
+                Serial.println("[QR] Gate cerrado, código almacenado pero no publicado: " + code);
+              } else {
+                currentBarcode = code;
+                lastBarcode = code;
+                barcodeAvailable = true;
+                shouldPublish = true;
+                // Cerrar gate después de publicar
+                if (isQrType && deviceConfig.qrGateEnabled) {
+                  qrGateOpen = false;
+                  Serial.println("[QR] Gate cerrado después de publicar");
+                }
+              }
             }
             xSemaphoreGive(barcodeMutex);
           }
@@ -581,7 +602,7 @@ void barcodeTask(void *pvParameters) {
 
 // Funciones de lectura de sensores
 void readButtons() {
-  if (deviceConfig.sensorType == SENSOR_SINGLE_BUTTON || deviceConfig.sensorType == SENSOR_DUAL_BUTTONS || deviceConfig.sensorType == SENSOR_VIBRATION_BUTTON) {
+  if (deviceConfig.sensorType == SENSOR_SINGLE_BUTTON || deviceConfig.sensorType == SENSOR_DUAL_BUTTONS || deviceConfig.sensorType == SENSOR_VIBRATION_BUTTON || deviceConfig.sensorType == SENSOR_QR_BUTTON) {
     // Leer Pulsador 1
     bool currentButton1State = digitalRead(deviceConfig.button1Pin);
 
@@ -598,6 +619,12 @@ void readButtons() {
 
       // Publicar estado
       publishButtonState(1, button1State, deviceConfig.button1Topic);
+
+      // QR Gate: abrir gate cuando pulsador se presiona (1)
+      if (deviceConfig.sensorType == SENSOR_QR_BUTTON && deviceConfig.qrGateEnabled && button1State) {
+        qrGateOpen = true;
+        Serial.println("🔘 [QR-GATE] Gate abierto por pulsador");
+      }
 
       if (deviceConfig.debugMode) {
         Serial.print("DEBUG > Pulsador 1: ");
@@ -640,7 +667,7 @@ void readButtons() {
 }
 
 void readVibrationSensor() {
-  if (deviceConfig.sensorType == SENSOR_VIBRATION || deviceConfig.sensorType == SENSOR_VIBRATION_BUTTON) {
+  if (deviceConfig.sensorType == SENSOR_VIBRATION || deviceConfig.sensorType == SENSOR_VIBRATION_BUTTON || deviceConfig.sensorType == SENSOR_QR_VIBRATION) {
     // SENSOR DIGITAL SW-420 - Dos modos: GOLPE (0) o VIBRACION (1)
     static unsigned long lastVibrationPublish = 0;
     static bool lastVibrationState = HIGH;
@@ -656,6 +683,11 @@ void readVibrationSensor() {
           lastVibrationPublish = millis();
           vibrationState = true;
           publishVibrationState(true);
+          // QR Gate: abrir gate cuando vibración detecta golpe
+          if (deviceConfig.sensorType == SENSOR_QR_VIBRATION && deviceConfig.qrGateEnabled) {
+            qrGateOpen = true;
+            Serial.println("📳 [QR-GATE] Gate abierto por golpe");
+          }
           Serial.println("📳 [VIBRATION] ¡GOLPE DETECTADO! (1) - Publicando a MQTT...");
           Serial.println("📳 [VIBRATION] Topic: " + deviceConfig.vibrationTopic);
         }
@@ -675,6 +707,11 @@ void readVibrationSensor() {
           lastVibrationPublish = millis();
           vibrationState = true;
           publishVibrationState(true);
+          // QR Gate: abrir gate cuando vibración detecta
+          if (deviceConfig.sensorType == SENSOR_QR_VIBRATION && deviceConfig.qrGateEnabled) {
+            qrGateOpen = true;
+            Serial.println("📳 [QR-GATE] Gate abierto por vibración");
+          }
           Serial.println("📳 [VIBRATION] Vibración detectada (1) - Publicando a MQTT...");
         }
       }
@@ -1686,6 +1723,7 @@ void loadConfiguration() {
   deviceConfig.barcodeTopic = preferences.getString("barcodeTopic", "sensor/" + deviceId + "/barcode");
   deviceConfig.barcodeBaudRate = preferences.getInt("barcodeBaud", BARCODE_DEFAULT_BAUD);
   deviceConfig.barcodeDedup = preferences.getBool("barcodeDedup", true);
+  deviceConfig.qrGateEnabled = preferences.getBool("qrGateEnabled", false);
 
   // Cargar configuración WiFi
   wifiConfig.ssid = preferences.getString("wifiSSID", "");
@@ -1743,6 +1781,7 @@ void saveConfiguration() {
   preferences.putString("barcodeTopic", deviceConfig.barcodeTopic);
   preferences.putInt("barcodeBaud", deviceConfig.barcodeBaudRate);
   preferences.putBool("barcodeDedup", deviceConfig.barcodeDedup);
+  preferences.putBool("qrGateEnabled", deviceConfig.qrGateEnabled);
 
   // Guardar configuración WiFi
   preferences.putString("wifiSSID", wifiConfig.ssid);
@@ -1824,6 +1863,58 @@ void setupSensorPins() {
       Serial.println(deviceConfig.barcodeDedup ? "Habilitada" : "Deshabilitada");
       break;
 
+    case SENSOR_QR:
+      Serial.println("========================================");
+      Serial.println("Configurando LECTOR QR");
+      Serial.println("========================================");
+      Serial.print("  RX Pin: GPIO ");
+      Serial.println(BARCODE_RX_PIN);
+      Serial.print("  TX Pin: GPIO ");
+      Serial.println(BARCODE_TX_PIN);
+      Serial.print("  Baud Rate: ");
+      Serial.println(deviceConfig.barcodeBaudRate);
+      Serial.print("  Topic: ");
+      Serial.println(deviceConfig.barcodeTopic);
+      break;
+
+    case SENSOR_QR_BUTTON:
+      Serial.println("========================================");
+      Serial.println("Configurando LECTOR QR + PULSADOR");
+      Serial.println("========================================");
+      Serial.print("  QR RX Pin: GPIO ");
+      Serial.println(BARCODE_RX_PIN);
+      Serial.print("  QR TX Pin: GPIO ");
+      Serial.println(BARCODE_TX_PIN);
+      Serial.print("  Pin Pulsador 1: GPIO ");
+      Serial.println(deviceConfig.button1Pin);
+      Serial.print("  QR Gate: ");
+      Serial.println(deviceConfig.qrGateEnabled ? "Habilitado (lectura bajo demanda)" : "Deshabilitado (lectura continua)");
+      Serial.print("  Topic QR: ");
+      Serial.println(deviceConfig.barcodeTopic);
+      Serial.print("  Topic Pulsador: ");
+      Serial.println(deviceConfig.button1Topic);
+      pinMode(deviceConfig.button1Pin, INPUT_PULLUP);
+      break;
+
+    case SENSOR_QR_VIBRATION:
+      Serial.println("========================================");
+      Serial.println("Configurando LECTOR QR + VIBRACIÓN");
+      Serial.println("========================================");
+      Serial.print("  QR RX Pin: GPIO ");
+      Serial.println(BARCODE_RX_PIN);
+      Serial.print("  QR TX Pin: GPIO ");
+      Serial.println(BARCODE_TX_PIN);
+      Serial.print("  Pin Vibración: GPIO ");
+      Serial.println(deviceConfig.vibrationPin);
+      Serial.print("  QR Gate: ");
+      Serial.println(deviceConfig.qrGateEnabled ? "Habilitado (lectura bajo demanda)" : "Deshabilitado (lectura continua)");
+      Serial.print("  Topic QR: ");
+      Serial.println(deviceConfig.barcodeTopic);
+      Serial.print("  Topic Vibración: ");
+      Serial.println(deviceConfig.vibrationTopic);
+      pinMode(deviceConfig.vibrationPin, INPUT_PULLUP);
+      break;
+
     default:
       Serial.println("Tipo de sensor no reconocido, usando ultrasonido por defecto");
       deviceConfig.sensorType = SENSOR_ULTRASONIC;
@@ -1878,6 +1969,7 @@ void resetToDefaults() {
   deviceConfig.barcodeTopic = "sensor/" + deviceId + "/barcode";
   deviceConfig.barcodeBaudRate = BARCODE_DEFAULT_BAUD;
   deviceConfig.barcodeDedup = true;
+  deviceConfig.qrGateEnabled = false;
 
   saveConfiguration();
   Serial.println("Configuración restablecida a valores por defecto");
@@ -2345,6 +2437,7 @@ void handleSaveConfig() {
     deviceConfig.barcodeBaudRate = configServer->arg("barcodeBaudRate").toInt();
   }
   deviceConfig.barcodeDedup = configServer->hasArg("barcodeDedup");
+  deviceConfig.qrGateEnabled = configServer->hasArg("qrGateEnabled");
 
   // Umbral de vibración
   if (configServer->hasArg("vibrationThreshold")) {
@@ -2694,6 +2787,7 @@ String generateSystemStatusJSON() {
   json += "\"barcodeTopic\":\"" + deviceConfig.barcodeTopic + "\",";
   json += "\"barcodeBaudRate\":" + String(deviceConfig.barcodeBaudRate) + ",";
   json += "\"barcodeDedup\":" + String(deviceConfig.barcodeDedup ? "true" : "false") + ",";
+  json += "\"qrGateEnabled\":" + String(deviceConfig.qrGateEnabled ? "true" : "false") + ",";
 
   json += "\"sensorInterval\":" + String(deviceConfig.sensorInterval) + ",";
   json += "\"readingsCount\":" + String(deviceConfig.readingsCount) + ",";

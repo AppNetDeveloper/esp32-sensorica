@@ -345,6 +345,9 @@
                         <option value="3">📳 Sensor Vibración SW-420</option>
                         <option value="4">📳🔘 Vibración + 1 Pulsador</option>
                         <option value="5">📊 Lector Códigos de Barras GM8-61S</option>
+                        <option value="6">📷 Lector QR</option>
+                        <option value="7">📷🔘 Lector QR + Pulsador</option>
+                        <option value="8">📷📳 Lector QR + Vibración</option>
                     </select>
                 </div>
 
@@ -512,6 +515,13 @@
                         </label>
                         <small>Si está activo, no publicará el mismo código dos veces seguidas</small>
                     </div>
+                    <div class="form-group" id="qr-gate-config" style="display:none;">
+                        <label for="qrGateEnabled">
+                            <input type="checkbox" id="qrGateEnabled" name="qrGateEnabled">
+                            Gate QR: Solo publicar lectura cuando pulsador/vibración se activa
+                        </label>
+                        <small>Si está activo, el QR solo publicará cuando el pulsador se presione o la vibración se detecte (1 lectura por activación)</small>
+                    </div>
                     <div class="status success">
                         <strong>Configuración Pines GM8-61S:</strong><br>
                         • RX (ESP32): IO15 (pin 7 header izq)<br>
@@ -564,6 +574,7 @@
             document.getElementById('dual-buttons-config').style.display = 'none';
             document.getElementById('vibration-config').style.display = 'none';
             document.getElementById('barcode-config').style.display = 'none';
+            document.getElementById('qr-gate-config').style.display = 'none';
 
             // Show relevant configuration
             switch(sensorType) {
@@ -585,6 +596,19 @@
                     break;
                 case '5': // Lector de Códigos de Barras
                     document.getElementById('barcode-config').style.display = 'block';
+                    break;
+                case '6': // Lector QR
+                    document.getElementById('barcode-config').style.display = 'block';
+                    break;
+                case '7': // QR + Pulsador
+                    document.getElementById('barcode-config').style.display = 'block';
+                    document.getElementById('single-button-config').style.display = 'block';
+                    document.getElementById('qr-gate-config').style.display = 'block';
+                    break;
+                case '8': // QR + Vibración
+                    document.getElementById('barcode-config').style.display = 'block';
+                    document.getElementById('vibration-config').style.display = 'block';
+                    document.getElementById('qr-gate-config').style.display = 'block';
                     break;
             }
         }
@@ -790,6 +814,9 @@
                 }
                 if (data.barcodeDedup !== undefined) {
                     document.getElementById('barcodeDedup').checked = data.barcodeDedup;
+                }
+                if (data.qrGateEnabled !== undefined) {
+                    document.getElementById('qrGateEnabled').checked = data.qrGateEnabled;
                 }
 
                 // Load checkboxes
