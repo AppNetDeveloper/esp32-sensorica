@@ -66,24 +66,24 @@ def main():
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     # 1. Limpiar build anterior
-    run_step("Limpiando build anterior...", "python -m platformio run --target clean")
+    run_step("Limpiando build anterior...", f'"{sys.executable}" -m platformio run --target clean')
 
     # 2. Compilar firmware
-    run_step("Compilando firmware...", "python -m platformio run")
+    run_step("Compilando firmware...", f'"{sys.executable}" -m platformio run')
 
     # 3. Compilar filesystem
-    run_step("Compilando filesystem (config.html)...", "python -m platformio run --target buildfs")
+    run_step("Compilando filesystem (config.html)...", f'"{sys.executable}" -m platformio run --target buildfs')
 
     # 4. Subir firmware
     print("\n--- Subiendo firmware ---")
     print("   Pon el ESP32 en modo bootloader (BOOT + RESET)")
     input("   Presiona ENTER cuando este listo... ")
-    run_step("Subiendo firmware...", f"python -m platformio run --target upload --upload-port {port}")
+    run_step("Subiendo firmware...", f'"{sys.executable}" -m platformio run --target upload --upload-port {port}')
 
     # 5. Subir filesystem
     print("\n--- Subiendo filesystem (config.html) ---")
     print("   Manten el ESP32 en modo bootloader")
-    run_step("Subiendo filesystem...", f"python -m platformio run --target uploadfs --upload-port {port}")
+    run_step("Subiendo filesystem...", f'"{sys.executable}" -m platformio run --target uploadfs --upload-port {port}')
 
     print("\n" + "=" * 50)
     print("  DEPLOY COMPLETADO")
